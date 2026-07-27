@@ -1,0 +1,8 @@
+# C++ symbol in your extension
+name: "ClayExt"
+
+platforms:
+    common:
+        context:
+            flags: ["-std=c++20"]
+            defines: ["DEFOLD_CLAY_EXTENSION"]

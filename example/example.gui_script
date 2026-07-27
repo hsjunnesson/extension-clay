@@ -1,0 +1,402 @@
+function init(self)
+	msg.post(".", "acquire_input_focus")
+
+	self.surface = clay.initialize(gui.get_node("clay_root"), 16384)
+	self.mouse_button_down = false
+	self.pointer_state = {-1, -1}
+	self.scroll_state = {0, 0}
+
+	self.grid_count_x = 8
+	self.grid_count_y = 4
+	self.cell_width = 64
+	self.cell_height = 84
+	
+	self.h = {}
+	self.h.toggle_clay_debug = hash("key_f2")
+	self.h.scroll_up = hash("mouse_wheel_up")
+	self.h.scroll_down = hash("mouse_wheel_down")
+	self.h.mouse_button_left = hash("mouse_button_left")
+	self.h.heading = hash("heading")
+	self.h.background = hash("background")
+	self.h.text = hash("text")
+	self.h.icon = hash("icon")
+	self.h.square = hash("square")
+	self.h.tooltip_background = hash("tooltip_background")
+	self.h.tooltip_text = hash("tooltip_text")
+	self.h.example = hash("example")
+	self.h.square = hash("square")
+	self.h.whep = hash("whep")
+	self.h.joyful = hash("joyful")
+end
+
+function on_reload(self)
+	self.grid = nil
+end
+
+function final(self)
+	if self.surface then
+		clay.destroy(self.surface)
+		self.surface = nil
+	end
+end
+
+function on_input(self, action_id, action)
+	if action.x and action.y then
+		-- Wonky hack for checking overlaps, Clay OnHover checks an inclusive range, with integer values you have hover two adjacent grid elements at the same time.
+		self.pointer_state[1] = action.screen_x + 0.01
+		self.pointer_state[2] = action.screen_y + 0.01
+	end
+
+	if action_id == self.h.toggle_clay_debug and action.pressed then
+		clay.set_debug_mode_enabled(self.surface, not clay.is_debug_mode_enabled(self.surface))
+	elseif action_id == self.h.mouse_button_left then
+		if action.pressed then
+			self.mouse_button_down = true
+		elseif action.released then
+			self.mouse_button_down = false
+		end
+	elseif action_id == self.h.scroll_up then
+		self.scroll_state[2] = self.scroll_state[2] + action.value
+	elseif action_id == self.h.scroll_down then
+		self.scroll_state[2] = self.scroll_state[2] - action.value
+	end
+end
+
+local function cell_on_hover(t, pointer)
+	t.background_color = vmath.vector3(0.25, 0.29, 0.37)
+	local tooltip = t.tooltip
+	tooltip.floating.offset.x = pointer.x + 12
+	tooltip.floating.offset.y = pointer.y + 12
+	tooltip.background_color = vmath.vector4(0.04, 0.05, 0.07, 0.96)
+	tooltip.children[1].text = string.format("Pointer: %d, %d", pointer.x, pointer.y)
+	tooltip.children[1].config.text_color = vmath.vector4(1, 1, 1, 1)
+end
+
+local function get_grid(self)
+	if not self.grid then
+		self.tooltip = {
+			id = "pointer_tooltip",
+			layout = {
+				padding = 8,
+			},
+			floating = {
+				offset = { x = 0, y = 0 },
+				z_index = 100,
+				attach_points = {
+					element = clay.ATTACH_POINT_LEFT_TOP,
+					parent = clay.ATTACH_POINT_LEFT_TOP,
+				},
+				pointer_capture_mode = clay.POINTER_CAPTURE_MODE_PASSTHROUGH,
+				attach_to = clay.ATTACH_TO_ROOT,
+				clip_to = clay.CLIP_TO_NONE,
+			},
+			corner_radius = 6,
+			background_color = vmath.vector4(0, 0, 0, 0),
+			layer = self.h.tooltip_background,
+			children = {
+				clay.text("", {
+					font_id = self.h.heading,
+					font_size = 16,
+					text_color = vmath.vector4(1, 1, 1, 0),
+					layer = self.h.tooltip_text,
+				}),
+			},
+		}
+
+		self.grid = {
+			id = "grid",
+			layout = {
+				sizing = {
+					width = clay.sizing_fit(),
+					height = clay.sizing_fit(),
+				},
+				layout_direction = clay.TOP_TO_BOTTOM,
+				child_gap = 8,
+				padding = 0,
+			},
+			clip = {
+				vertical = true,
+				scroll = true,
+			},
+			children = {},
+		}
+
+		for y = 1, self.grid_count_y do
+			self.grid.children[y] = {
+				id = clay.idi_local("row", y),
+				layout = {
+					sizing = {
+						width = clay.sizing_fit(),
+						height = clay.sizing_grow(),
+					},
+					layout_direction = clay.LEFT_TO_RIGHT,
+					child_gap = 8,
+				},
+				children = {},
+			}
+			
+			for x = 1, self.grid_count_x do
+				self.grid.children[y].children[x] = {
+					id = clay.idi_local("cell", x),
+					layout = {
+						sizing = {
+							width = clay.sizing_fixed(self.cell_width),
+							height = clay.sizing_fixed(self.cell_height),
+						},
+						child_alignment = {
+							x = clay.ALIGN_X_CENTER,
+							y = clay.ALIGN_Y_TOP,
+						},
+						layout_direction = clay.TOP_TO_BOTTOM,
+						padding = 4,
+						child_gap = 4,
+					},
+					transition = {
+						duration = 0.25,
+						properties = clay.TRANSITION_PROPERTY_DIMENSIONS,
+					},
+					corner_radius = 6,
+					background_color = vmath.vector3(0.18, 0.22, 0.3),
+					on_hover = cell_on_hover,
+					tooltip = self.tooltip,
+					layer = self.h.background,
+					children = {
+						-- Inner header
+						{
+							id = clay.idi_local("inner_header", x),
+							layout = {
+								sizing = {
+									width = clay.sizing_grow(),
+									height = clay.sizing_fit(),
+								},
+								child_alignment = {
+									x = clay.ALIGN_X_CENTER,
+									y = clay.ALIGN_Y_CENTER,
+								},
+							},
+							corner_radius = 6,
+							background_color = vmath.vector3(0.38, 0.42, 0.5),
+							layer = self.h.background,
+							children = {
+								clay.text(x .. "," .. y, {
+									font_id = self.h.heading,
+									font_size = 16,
+									layer = self.h.text,
+									text_color = vmath.vector3(0, 0, 0),
+								}),
+							},
+						},
+						-- Icon
+						{
+							id = clay.idi_local("icon", x),
+							layout = {
+								sizing = {
+									width = clay.sizing_grow(),
+									height = clay.sizing_grow(),
+								},
+							},
+							corner_radius = 6,
+							layer = self.h.icon,
+							image = {
+								texture = self.h.example,
+								animation = self.h.whep,
+							},
+						},						
+					},
+				}
+			end
+		end
+	end
+
+	for y = 1, self.grid_count_y do
+		for x = 1, self.grid_count_x do
+			self.grid.children[y].children[x].background_color = vmath.vector3(0.18, 0.22, 0.3)
+		end
+	end
+	self.tooltip.background_color = vmath.vector4(0, 0, 0, 0)
+	self.tooltip.children[1].text = ""
+	self.tooltip.children[1].config.text_color = vmath.vector4(1, 1, 1, 0)
+	
+	return self.grid
+end
+
+function update(self, dt)
+	if self.surface then
+		-- Interaction uses the previous completed layout and must run before
+		-- begin_layout resets Clay's per-frame element tree.
+		clay.set_pointer_state(self.surface, self.pointer_state[1], self.pointer_state[2], self.mouse_button_down)
+		clay.update_scroll_containers(self.surface, true, self.scroll_state[1], self.scroll_state[2], dt)
+		self.scroll_state[1] = 0
+		self.scroll_state[2] = 0
+
+		clay.begin_layout(self.surface)
+
+		clay.element {
+			id = "outer",
+			layout = {
+				sizing = {
+					width = clay.sizing_grow(),
+					height = clay.sizing_grow(),
+				},
+				padding = 16,
+				child_gap = 8,
+				layout_direction = clay.LEFT_TO_RIGHT,
+			},
+			background_color = vmath.vector4(0.08, 0.1, 0.14, 1.0),
+			children = {
+				get_grid(self),
+				self.tooltip,
+				-- Controls
+				{
+					id = "controls",
+					layout = {
+						sizing = {
+							width = clay.sizing_fit(128),
+							height = clay.sizing_fit(),
+						},
+						padding = 0,
+						child_gap = 8,
+						layout_direction = clay.TOP_TO_BOTTOM,
+					},
+					children = {
+						clay.text(string.format("Grid Size: %u x %u", self.grid_count_x, self.grid_count_y), {
+							font_id = self.h.heading,
+							font_size = 16,
+							layer = self.h.text,
+							text_color = vmath.vector3(1, 1, 1),
+						}),
+						{
+							id = clay.id_local("row_add"),
+							layout = {
+								sizing = {
+									width = clay.sizing_fit(64),
+									height = clay.sizing_fit(),
+								},
+								child_alignment = {
+									x = clay.ALIGN_X_CENTER,
+								},
+								padding = 4,
+								child_gap = 8,
+								layout_direction = clay.LEFT_TO_RIGHT,
+							},
+							background_color = vmath.vector3(0.38, 0.42, 0.5),
+							on_hover = function(t, pointer)
+								t.background_color = pointer.state == clay.POINTER_PRESSED and vmath.vector3(0.38, 0.42, 0.5) or vmath.vector3(0.42, 0.46, 0.54)
+								if pointer.state == clay.POINTER_PRESSED_THIS_FRAME then
+									self.grid = nil
+									self.grid_count_y = self.grid_count_y + 1
+								end
+							end,
+							corner_radius = 6,
+							layer = self.h.background,
+							children = {
+								clay.text("Add Row", {
+									font_id = self.h.heading,
+									font_size = 16,
+									layer = self.h.text,
+									text_color = vmath.vector3(0, 0, 0),
+								}),
+							},
+						},
+						{
+							id = clay.id_local("row_add_10"),
+							layout = {
+								sizing = {
+									width = clay.sizing_fit(64),
+									height = clay.sizing_fit(),
+								},
+								child_alignment = {
+									x = clay.ALIGN_X_CENTER,
+								},
+								padding = 4,
+								child_gap = 8,
+								layout_direction = clay.LEFT_TO_RIGHT,
+							},
+							background_color = vmath.vector3(0.38, 0.42, 0.5),
+							on_hover = function(t, pointer)
+								t.background_color = pointer.state == clay.POINTER_PRESSED and vmath.vector3(0.38, 0.42, 0.5) or vmath.vector3(0.42, 0.46, 0.54)
+								if pointer.state == clay.POINTER_PRESSED_THIS_FRAME then
+									self.grid = nil
+									self.grid_count_y = self.grid_count_y + 10
+								end
+							end,
+							corner_radius = 6,
+							layer = self.h.background,
+							children = {
+								clay.text("Add 10 Rows", {
+									font_id = self.h.heading,
+									font_size = 16,
+									layer = self.h.text,
+									text_color = vmath.vector3(0, 0, 0),
+								}),
+							},
+						},
+						{
+							id = clay.id_local("resize"),
+							layout = {
+								sizing = {
+									width = clay.sizing_fit(64),
+									height = clay.sizing_fit(),
+								},
+								child_alignment = {
+									x = clay.ALIGN_X_CENTER,
+								},
+								padding = 4,
+								child_gap = 8,
+								layout_direction = clay.LEFT_TO_RIGHT,
+							},
+							background_color = vmath.vector3(0.38, 0.42, 0.5),
+							on_hover = function(t, pointer)
+								t.background_color = pointer.state == clay.POINTER_PRESSED and vmath.vector3(0.38, 0.42, 0.5) or vmath.vector3(0.42, 0.46, 0.54)
+								if pointer.state == clay.POINTER_PRESSED_THIS_FRAME then
+									self.cell_width = self.cell_width + 8
+									self.cell_height = self.cell_height + 8
+									self.grid = nil
+								end
+							end,
+							corner_radius = 6,
+							layer = self.h.background,
+							children = {
+								clay.text("Resize", {
+									font_id = self.h.heading,
+									font_size = 16,
+									layer = self.h.text,
+									text_color = vmath.vector3(0, 0, 0),
+								}),
+							},
+						},
+					},
+				},
+				-- Nine-slice example
+				{
+					id = "nine-slice",
+					layout = {
+						sizing = {
+							width = clay.sizing_fit(128),
+							height = clay.sizing_fit(128),
+						},
+						padding = 16,
+						child_gap = 8,
+						layout_direction = clay.TOP_TO_BOTTOM,
+					},
+					background_color = vmath.vector3(0.38, 0.42, 0.5),
+					slice9 = vmath.vector4(8, 8, 8, 16),
+					image = {
+						texture = self.h.example,
+						animation = self.h.square,
+					},
+					children = {
+						clay.text("nine SLICED example", {
+							font_id = self.h.joyful,
+							font_size = 36,
+							layer = self.h.text,
+							text_color = vmath.vector3(0.1, 0.1, 0.1),
+						}),
+					},
+				},
+			},
+		}
+		
+		clay.end_layout(self.surface, dt)
+	end
+end

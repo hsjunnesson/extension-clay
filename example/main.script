@@ -1,0 +1,22 @@
+local h = {}
+
+function init(self)
+	msg.post(".", "acquire_input_focus")
+
+	self.show_profiler = false
+	self.show_clay_debug = false
+	self.frame_count = 0
+	
+	h.toggle_profiler = hash("key_f1")
+end
+
+function on_input(self, action_id, action)
+	if action_id == h.toggle_profiler and action.pressed then
+		self.show_profiler = not self.show_profiler
+		profiler.enable_ui(self.show_profiler)
+	end
+end
+
+function on_reload(self)
+	self.show_profiler = false
+end
