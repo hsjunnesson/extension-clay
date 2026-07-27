@@ -13,7 +13,7 @@ title = extension-clay
 
 [library]
 include_dirs = clay
-defold_min_version = 1.13.1
+defold_min_version = 1.13.0
 
 [input]
 game_binding = /builtins/input/all.input_bindingc
