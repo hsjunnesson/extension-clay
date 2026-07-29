@@ -2440,17 +2440,7 @@ static int dclay_Id(lua_State* L)
     return dclay_NewId(L, DCLAY_ID_GLOBAL);
 }
 
-static int dclay_Sid(lua_State* L)
-{
-    return dclay_NewId(L, DCLAY_ID_GLOBAL);
-}
-
 static int dclay_Idi(lua_State* L)
-{
-    return dclay_NewId(L, DCLAY_ID_GLOBAL_INDEXED);
-}
-
-static int dclay_Sidi(lua_State* L)
 {
     return dclay_NewId(L, DCLAY_ID_GLOBAL_INDEXED);
 }
@@ -2460,17 +2450,7 @@ static int dclay_IdLocal(lua_State* L)
     return dclay_NewId(L, DCLAY_ID_LOCAL);
 }
 
-static int dclay_SidLocal(lua_State* L)
-{
-    return dclay_NewId(L, DCLAY_ID_LOCAL);
-}
-
 static int dclay_IdiLocal(lua_State* L)
-{
-    return dclay_NewId(L, DCLAY_ID_LOCAL_INDEXED);
-}
-
-static int dclay_SidiLocal(lua_State* L)
 {
     return dclay_NewId(L, DCLAY_ID_LOCAL_INDEXED);
 }
@@ -2841,13 +2821,9 @@ static const luaL_reg Module_methods[] = {
     { "end_layout", dclay_EndLayout },
     { "text", dclay_Text },
     { "id", dclay_Id },
-    { "sid", dclay_Sid },
     { "idi", dclay_Idi },
-    { "sidi", dclay_Sidi },
     { "id_local", dclay_IdLocal },
-    { "sid_local", dclay_SidLocal },
     { "idi_local", dclay_IdiLocal },
-    { "sidi_local", dclay_SidiLocal },
     { "sizing_fixed", dclay_SizingFixed },
     { "sizing_grow", dclay_SizingGrow },
     { "sizing_fit", dclay_SizingFit },

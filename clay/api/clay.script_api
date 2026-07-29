@@ -78,34 +78,9 @@
     - type: userdata
       desc: Clay id descriptor.
 
-  - name: sid
-    type: function
-    desc: Creates a global Clay string id.
-    parameters:
-    - name: value
-      type: string
-      desc: Id string.
-    returns:
-    - type: userdata
-      desc: Clay id descriptor.
-
   - name: idi
     type: function
     desc: Creates an indexed global Clay id.
-    parameters:
-    - name: value
-      type: string
-      desc: Base id string.
-    - name: index
-      type: number
-      desc: Numeric id offset.
-    returns:
-    - type: userdata
-      desc: Clay id descriptor.
-
-  - name: sidi
-    type: function
-    desc: Creates an indexed global Clay string id.
     parameters:
     - name: value
       type: string
@@ -128,34 +103,9 @@
     - type: userdata
       desc: Clay id descriptor.
 
-  - name: sid_local
-    type: function
-    desc: Creates a Clay string id local to the currently open parent element.
-    parameters:
-    - name: value
-      type: string
-      desc: Id string.
-    returns:
-    - type: userdata
-      desc: Clay id descriptor.
-
   - name: idi_local
     type: function
     desc: Creates an indexed Clay id local to the currently open parent element.
-    parameters:
-    - name: value
-      type: string
-      desc: Base id string.
-    - name: index
-      type: number
-      desc: Numeric id offset.
-    returns:
-    - type: userdata
-      desc: Clay id descriptor.
-
-  - name: sidi_local
-    type: function
-    desc: Creates an indexed Clay string id local to the currently open parent element.
     parameters:
     - name: value
       type: string
