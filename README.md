@@ -71,7 +71,7 @@ clay.set_pointer_state(surface, action.screen_x, action.screen_y, pointer_down)
 clay.update_scroll_containers(surface, true, scroll_x, scroll_y, dt)
 ```
 
-The bundled [script API](clay/api/clay.script_api) provides editor completion and documentation for the Lua functions and constants.
+The generated [script API](clay/api/clay.script_api) and [Lua annotations](clay/api/clay.lua) provide editor completion and type information for functions, constants, element declarations, and their nested configuration tables.
 
 ## Architecture
 
@@ -110,3 +110,6 @@ This project includes a modified copy of [Clay 0.14](https://github.com/nicbarke
 
 The Defold integration is copyright © 2026 Hans Sjunnesson and is released under the [MIT License](LICENSE.md).
 
+## Development
+
+The Lua API documentation is generated from the Doxygen blocks in `clay/src/extension_clay.cpp`. After changing the public API or its documentation, run `python utils/update_script_api.py` from any working directory. Do not edit the generated files in `clay/api` manually.

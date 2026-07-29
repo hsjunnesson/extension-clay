@@ -233,6 +233,334 @@ struct dclay_surface_t
 static dclay_surface_t* g_ActiveSurface = 0;
 static bool             g_PixelPerfect = 0;
 
+/**
+ * Functions and constants for building Clay layouts with retained Defold GUI nodes.
+ * @module clay
+ * @constant LEFT_TO_RIGHT [type: integer] Lay children out horizontally.
+ * @constant TOP_TO_BOTTOM [type: integer] Lay children out vertically.
+ * @constant ALIGN_X_LEFT [type: integer] Align children to the left.
+ * @constant ALIGN_X_RIGHT [type: integer] Align children to the right.
+ * @constant ALIGN_X_CENTER [type: integer] Center children horizontally.
+ * @constant ALIGN_Y_TOP [type: integer] Align children to the top.
+ * @constant ALIGN_Y_BOTTOM [type: integer] Align children to the bottom.
+ * @constant ALIGN_Y_CENTER [type: integer] Center children vertically.
+ * @constant ATTACH_POINT_LEFT_TOP [type: integer] Left-top floating attachment point.
+ * @constant ATTACH_POINT_LEFT_CENTER [type: integer] Left-center floating attachment point.
+ * @constant ATTACH_POINT_LEFT_BOTTOM [type: integer] Left-bottom floating attachment point.
+ * @constant ATTACH_POINT_CENTER_TOP [type: integer] Center-top floating attachment point.
+ * @constant ATTACH_POINT_CENTER_CENTER [type: integer] Center floating attachment point.
+ * @constant ATTACH_POINT_CENTER_BOTTOM [type: integer] Center-bottom floating attachment point.
+ * @constant ATTACH_POINT_RIGHT_TOP [type: integer] Right-top floating attachment point.
+ * @constant ATTACH_POINT_RIGHT_CENTER [type: integer] Right-center floating attachment point.
+ * @constant ATTACH_POINT_RIGHT_BOTTOM [type: integer] Right-bottom floating attachment point.
+ * @constant POINTER_CAPTURE_MODE_CAPTURE [type: integer] Capture pointer interaction from elements behind a floating element.
+ * @constant POINTER_CAPTURE_MODE_PASSTHROUGH [type: integer] Pass pointer interaction through a floating element.
+ * @constant ATTACH_TO_NONE [type: integer] Disable floating behavior.
+ * @constant ATTACH_TO_PARENT [type: integer] Attach a floating element to its declarative parent.
+ * @constant ATTACH_TO_ELEMENT_WITH_ID [type: integer] Attach a floating element to floating.parent_id.
+ * @constant ATTACH_TO_ROOT [type: integer] Attach a floating element to the layout root.
+ * @constant CLIP_TO_NONE [type: integer] Do not inherit the attached element's clipping.
+ * @constant CLIP_TO_ATTACHED_PARENT [type: integer] Inherit the attached element's clipping.
+ * @constant TRANSITION_PROPERTY_NONE [type: integer] No transition properties.
+ * @constant TRANSITION_PROPERTY_X [type: integer] Transition horizontal position.
+ * @constant TRANSITION_PROPERTY_Y [type: integer] Transition vertical position.
+ * @constant TRANSITION_PROPERTY_POSITION [type: integer] Transition both position axes.
+ * @constant TRANSITION_PROPERTY_WIDTH [type: integer] Transition width.
+ * @constant TRANSITION_PROPERTY_HEIGHT [type: integer] Transition height.
+ * @constant TRANSITION_PROPERTY_DIMENSIONS [type: integer] Transition width and height.
+ * @constant TRANSITION_PROPERTY_BOUNDING_BOX [type: integer] Transition position and dimensions.
+ * @constant TRANSITION_PROPERTY_BACKGROUND_COLOR [type: integer] Transition background color.
+ * @constant TRANSITION_PROPERTY_OVERLAY_COLOR [type: integer] Transition overlay color.
+ * @constant TRANSITION_PROPERTY_BORDER_COLOR [type: integer] Transition border color.
+ * @constant TRANSITION_PROPERTY_BORDER_WIDTH [type: integer] Transition border widths.
+ * @constant TRANSITION_PROPERTY_BORDER [type: integer] Transition border color and widths.
+ * @constant TRANSITION_DISABLE_INTERACTIONS_WHILE_TRANSITIONING_POSITION [type: integer] Disable interactions while position is transitioning.
+ * @constant TRANSITION_ALLOW_INTERACTIONS_WHILE_TRANSITIONING_POSITION [type: integer] Allow interactions while position is transitioning.
+ * @constant POINTER_PRESSED_THIS_FRAME [type: integer] Pointer changed to pressed this frame.
+ * @constant POINTER_PRESSED [type: integer] Pointer remains pressed.
+ * @constant POINTER_RELEASED_THIS_FRAME [type: integer] Pointer changed to released this frame.
+ * @constant POINTER_RELEASED [type: integer] Pointer remains released.
+ */
+
+/**
+ * @alias clay.ElementId [type: string|hash|clay.Id] String, Defold hash, or Clay ID descriptor.
+ */
+
+/**
+ * @alias clay.Color [type: vector3|vector4] RGB or RGBA color in Defold's normalized color range.
+ */
+
+/**
+ * @alias clay.CornerRadius [type: number|table<integer, number>] One radius for every corner, or top-left, top-right, bottom-right, bottom-left.
+ */
+
+/**
+ * @alias clay.Child [type: clay.Element|clay.Text] A child element or text declaration.
+ */
+
+/**
+ * @alias clay.LayoutDirection [type: integer] Child layout direction.
+ * @value clay.LEFT_TO_RIGHT
+ * @value clay.TOP_TO_BOTTOM
+ */
+
+/**
+ * @alias clay.AlignX [type: integer] Horizontal child alignment.
+ * @value clay.ALIGN_X_LEFT
+ * @value clay.ALIGN_X_RIGHT
+ * @value clay.ALIGN_X_CENTER
+ */
+
+/**
+ * @alias clay.AlignY [type: integer] Vertical child alignment.
+ * @value clay.ALIGN_Y_TOP
+ * @value clay.ALIGN_Y_BOTTOM
+ * @value clay.ALIGN_Y_CENTER
+ */
+
+/**
+ * @alias clay.AttachPoint [type: integer] Floating attachment point.
+ * @value clay.ATTACH_POINT_LEFT_TOP
+ * @value clay.ATTACH_POINT_LEFT_CENTER
+ * @value clay.ATTACH_POINT_LEFT_BOTTOM
+ * @value clay.ATTACH_POINT_CENTER_TOP
+ * @value clay.ATTACH_POINT_CENTER_CENTER
+ * @value clay.ATTACH_POINT_CENTER_BOTTOM
+ * @value clay.ATTACH_POINT_RIGHT_TOP
+ * @value clay.ATTACH_POINT_RIGHT_CENTER
+ * @value clay.ATTACH_POINT_RIGHT_BOTTOM
+ */
+
+/**
+ * @alias clay.PointerCaptureMode [type: integer] Floating pointer capture behavior.
+ * @value clay.POINTER_CAPTURE_MODE_CAPTURE
+ * @value clay.POINTER_CAPTURE_MODE_PASSTHROUGH
+ */
+
+/**
+ * @alias clay.AttachTo [type: integer] Floating attachment target.
+ * @value clay.ATTACH_TO_NONE
+ * @value clay.ATTACH_TO_PARENT
+ * @value clay.ATTACH_TO_ELEMENT_WITH_ID
+ * @value clay.ATTACH_TO_ROOT
+ */
+
+/**
+ * @alias clay.ClipTo [type: integer] Floating clipping behavior.
+ * @value clay.CLIP_TO_NONE
+ * @value clay.CLIP_TO_ATTACHED_PARENT
+ */
+
+/**
+ * @alias clay.TransitionProperty [type: integer] Nonzero transition property bitmask; add flags to combine them.
+ * @value clay.TRANSITION_PROPERTY_X
+ * @value clay.TRANSITION_PROPERTY_Y
+ * @value clay.TRANSITION_PROPERTY_POSITION
+ * @value clay.TRANSITION_PROPERTY_WIDTH
+ * @value clay.TRANSITION_PROPERTY_HEIGHT
+ * @value clay.TRANSITION_PROPERTY_DIMENSIONS
+ * @value clay.TRANSITION_PROPERTY_BOUNDING_BOX
+ * @value clay.TRANSITION_PROPERTY_BACKGROUND_COLOR
+ * @value clay.TRANSITION_PROPERTY_OVERLAY_COLOR
+ * @value clay.TRANSITION_PROPERTY_BORDER_COLOR
+ * @value clay.TRANSITION_PROPERTY_BORDER_WIDTH
+ * @value clay.TRANSITION_PROPERTY_BORDER
+ */
+
+/**
+ * @alias clay.TransitionInteractionHandling [type: integer] Interaction behavior during position transitions.
+ * @value clay.TRANSITION_DISABLE_INTERACTIONS_WHILE_TRANSITIONING_POSITION
+ * @value clay.TRANSITION_ALLOW_INTERACTIONS_WHILE_TRANSITIONING_POSITION
+ */
+
+/**
+ * @alias clay.PointerState [type: integer] Current Clay pointer state.
+ * @value clay.POINTER_PRESSED_THIS_FRAME
+ * @value clay.POINTER_PRESSED
+ * @value clay.POINTER_RELEASED_THIS_FRAME
+ * @value clay.POINTER_RELEASED
+ */
+
+/**
+ * @class clay.Surface
+ * A per-root Clay context and retained Defold GUI subtree.
+ */
+
+/**
+ * @class clay.Id
+ * Opaque ID descriptor returned by a Clay ID helper.
+ */
+
+/**
+ * @class clay.SizingAxis
+ * Opaque sizing descriptor returned by a Clay sizing helper.
+ */
+
+/**
+ * @class clay.Padding
+ * Per-side layout padding.
+ * @field left [type: integer|nil] Left padding.
+ * @field right [type: integer|nil] Right padding.
+ * @field top [type: integer|nil] Top padding.
+ * @field bottom [type: integer|nil] Bottom padding.
+ */
+
+/**
+ * @class clay.Sizing
+ * Element sizing axes.
+ * @field width [type: clay.SizingAxis|nil] Width sizing.
+ * @field height [type: clay.SizingAxis|nil] Height sizing.
+ */
+
+/**
+ * @class clay.ChildAlignment
+ * Alignment of children within an element.
+ * @field x [type: clay.AlignX|nil] Horizontal alignment.
+ * @field y [type: clay.AlignY|nil] Vertical alignment.
+ */
+
+/**
+ * @class clay.Layout
+ * Clay layout configuration.
+ * @field sizing [type: clay.Sizing|nil] Width and height sizing.
+ * @field padding [type: integer|clay.Padding|nil] One value for every side or per-side padding.
+ * @field child_gap [type: integer|nil] Gap between children.
+ * @field layout_direction [type: clay.LayoutDirection|nil] Child layout direction.
+ * @field child_alignment [type: clay.ChildAlignment|nil] Child alignment.
+ */
+
+/**
+ * @class clay.Offset
+ * Two-dimensional floating offset.
+ * @field x [type: number|nil] Horizontal offset.
+ * @field y [type: number|nil] Vertical offset.
+ */
+
+/**
+ * @class clay.Expand
+ * Additional floating dimensions.
+ * @field width [type: number|nil] Additional width.
+ * @field height [type: number|nil] Additional height.
+ */
+
+/**
+ * @class clay.AttachPoints
+ * Element and parent floating attachment points.
+ * @field element [type: clay.AttachPoint|nil] Point on the floating element.
+ * @field parent [type: clay.AttachPoint|nil] Point on the attachment target.
+ */
+
+/**
+ * @class clay.Floating
+ * Floating element configuration.
+ * @field offset [type: clay.Offset|nil] Offset from the attachment point.
+ * @field expand [type: clay.Expand|nil] Additional dimensions.
+ * @field parent_id [type: clay.ElementId|nil] Required with ATTACH_TO_ELEMENT_WITH_ID; must be a global ID declared earlier.
+ * @field z_index [type: integer|nil] Clay floating draw order.
+ * @field attach_points [type: clay.AttachPoints|nil] Element and parent attachment points.
+ * @field pointer_capture_mode [type: clay.PointerCaptureMode|nil] Pointer capture behavior.
+ * @field attach_to [type: clay.AttachTo|nil] Attachment target; defaults to ATTACH_TO_NONE.
+ * @field clip_to [type: clay.ClipTo|nil] Floating clipping behavior.
+ */
+
+/**
+ * @class clay.Clip
+ * Clipping and optional managed scrolling.
+ * @field horizontal [type: boolean|nil] Clip horizontally.
+ * @field vertical [type: boolean|nil] Clip vertically.
+ * @field x [type: number|nil] Explicit horizontal child offset.
+ * @field y [type: number|nil] Explicit vertical child offset.
+ * @field scroll [type: boolean|nil] Use Clay's managed scroll offset; requires horizontal and/or vertical clipping.
+ */
+
+/**
+ * @class clay.BorderWidth
+ * Per-side border widths.
+ * @field left [type: integer|nil] Left width.
+ * @field right [type: integer|nil] Right width.
+ * @field top [type: integer|nil] Top width.
+ * @field bottom [type: integer|nil] Bottom width.
+ * @field between_children [type: integer|nil] Divider width between children.
+ */
+
+/**
+ * @class clay.Border
+ * Border configuration.
+ * @field width [type: integer|clay.BorderWidth] One width for every side or per-side widths.
+ * @field color [type: clay.Color|nil] Border color; defaults to white.
+ */
+
+/**
+ * @class clay.Image
+ * Defold GUI image configuration.
+ * @field texture [type: string|hash] GUI texture or atlas name.
+ * @field animation [type: string|hash|nil] Atlas animation name.
+ */
+
+/**
+ * @class clay.Transition
+ * Native Clay transition configuration.
+ * @field duration [type: number] Duration in seconds.
+ * @field properties [type: clay.TransitionProperty] Nonzero property bitmask.
+ * @field interaction_handling [type: clay.TransitionInteractionHandling|nil] Position-transition interaction behavior.
+ */
+
+/**
+ * @class clay.PointerData
+ * Pointer coordinates and transition state.
+ * @field x [type: number] Layout-space X coordinate.
+ * @field y [type: number] Layout-space Y coordinate.
+ * @field state [type: clay.PointerState] Current pointer state.
+ */
+
+/**
+ * @class clay.Element
+ * Declarative Clay element. Application-specific data may also be stored on this table.
+ * @field id [type: clay.ElementId|nil] Missing IDs use a Clay automatic ID.
+ * @field layout [type: clay.Layout|nil] Layout configuration.
+ * @field background_color [type: clay.Color|nil] Background color and image tint.
+ * @field overlay_color [type: clay.Color|nil] Overlay color.
+ * @field corner_radius [type: clay.CornerRadius|nil] Rounded background or image corners.
+ * @field floating [type: clay.Floating|nil] Floating configuration.
+ * @field image [type: string|hash|clay.Image|nil] GUI texture or atlas image.
+ * @field clip [type: clay.Clip|nil] Clipping configuration.
+ * @field border [type: clay.Border|nil] Border configuration.
+ * @field transition [type: clay.Transition|nil] Native Clay transition; stable explicit IDs are recommended.
+ * @field layer [type: string|hash|nil] Explicit GUI layer for this element's commands; layers are not inherited.
+ * @field slice9 [type: vector4|nil] Defold slice-9 values ordered left, top, right, bottom.
+ * @field on_hover [type: fun(element: clay.Element, pointer?: clay.PointerData)|nil] Callback invoked while this native element is open.
+ * @field children [type: table<integer, clay.Child>|nil] Child elements and text declarations.
+ * @field [string] [type: any] Application data.
+ */
+
+/**
+ * @class clay.TextConfig
+ * Text layout and Defold rendering configuration.
+ * @field font_id [type: string|hash] Required GUI font name.
+ * @field font_size [type: integer|nil] Defaults to the size authored in the Defold font resource.
+ * @field text_color [type: clay.Color|nil] Text color; defaults to white.
+ * @field letter_spacing [type: integer|nil] Additional letter spacing.
+ * @field line_height [type: integer|nil] Explicit line height.
+ * @field layer [type: string|hash|nil] Explicit GUI layer; layers are not inherited.
+ */
+
+/**
+ * @class clay.Text
+ * Mutable text declaration returned by clay.text().
+ * @field text [type: string] Text content.
+ * @field config [type: clay.TextConfig] Text configuration.
+ */
+
+/**
+ * @class clay.ScrollContainerData
+ * Retained scroll-container state.
+ * @field position [type: vector3] Current scroll offset.
+ * @field container_size [type: vector3] Visible dimensions.
+ * @field content_size [type: vector3] Content dimensions.
+ * @field horizontal [type: boolean] Whether horizontal clipping is enabled.
+ * @field vertical [type: boolean] Whether vertical clipping is enabled.
+ */
+
 #if defined(DM_DEBUG)
 static uint32_t g_SurfaceCount = 0;
 static uint32_t g_NodeCount = 0;
@@ -2220,6 +2548,13 @@ static void dclay_FreeSurface(lua_State* L, dclay_surface_t* surface, bool delet
     surface->valid = false;
 }
 
+/**
+ * Creates a Clay surface rooted at a Defold GUI node.
+ * @name clay.initialize(root_node, max_element_count)
+ * @param root_node [type: node] GUI node used as the layout bounds and parent for generated nodes.
+ * @param max_element_count [type: integer|nil] Element capacity for this surface; defaults to 8192.
+ * @return surface [type: clay.Surface] New Clay surface.
+ */
 static int dclay_Initialize(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2305,6 +2640,11 @@ static int dclay_Initialize(lua_State* L)
     return 1;
 }
 
+/**
+ * Begins a layout and synchronizes its dimensions from the root GUI node.
+ * @name clay.begin_layout(surface)
+ * @param surface [type: clay.Surface] Clay surface.
+ */
 static int dclay_BeginLayout(lua_State* L)
 {
     DM_PROFILE("ClayBeginLayout");
@@ -2334,6 +2674,11 @@ static int dclay_BeginLayout(lua_State* L)
     return 0;
 }
 
+/**
+ * Retains a root element declaration for the current layout.
+ * @name clay.element(element)
+ * @param element [type: clay.Element] Declarative element tree.
+ */
 static int dclay_Element(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
@@ -2358,6 +2703,12 @@ static int dclay_Element(lua_State* L)
     return 0;
 }
 
+/**
+ * Completes the layout and reconciles Clay render commands with retained GUI nodes.
+ * @name clay.end_layout(surface, dt)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param dt [type: number|nil] Frame delta time in seconds; defaults to zero.
+ */
 static int dclay_EndLayout(lua_State* L)
 {
     DM_PROFILE("ClayEndLayout");
@@ -2435,21 +2786,47 @@ static int dclay_NewId(lua_State* L, dclay_id_type_t type)
     return 1;
 }
 
+/**
+ * Creates a global Clay string ID.
+ * @name clay.id(value)
+ * @param value [type: string] ID string.
+ * @return id [type: clay.Id] Clay ID descriptor.
+ */
 static int dclay_Id(lua_State* L)
 {
     return dclay_NewId(L, DCLAY_ID_GLOBAL);
 }
 
+/**
+ * Creates an indexed global Clay ID.
+ * @name clay.idi(value, index)
+ * @param value [type: string] Base ID string.
+ * @param index [type: integer] Numeric ID offset.
+ * @return id [type: clay.Id] Clay ID descriptor.
+ */
 static int dclay_Idi(lua_State* L)
 {
     return dclay_NewId(L, DCLAY_ID_GLOBAL_INDEXED);
 }
 
+/**
+ * Creates a Clay ID local to the currently open parent element.
+ * @name clay.id_local(value)
+ * @param value [type: string] ID string.
+ * @return id [type: clay.Id] Clay ID descriptor.
+ */
 static int dclay_IdLocal(lua_State* L)
 {
     return dclay_NewId(L, DCLAY_ID_LOCAL);
 }
 
+/**
+ * Creates an indexed Clay ID local to the currently open parent element.
+ * @name clay.idi_local(value, index)
+ * @param value [type: string] Base ID string.
+ * @param index [type: integer] Numeric ID offset.
+ * @return id [type: clay.Id] Clay ID descriptor.
+ */
 static int dclay_IdiLocal(lua_State* L)
 {
     return dclay_NewId(L, DCLAY_ID_LOCAL_INDEXED);
@@ -2465,6 +2842,12 @@ static Clay_SizingAxis* dclay_NewSizing(lua_State* L)
     return sizing;
 }
 
+/**
+ * Creates a fixed-size axis.
+ * @name clay.sizing_fixed(size)
+ * @param size [type: number] Size in layout pixels.
+ * @return sizing [type: clay.SizingAxis] Sizing descriptor.
+ */
 static int dclay_SizingFixed(lua_State* L)
 {
     float            size = (float)luaL_checknumber(L, 1);
@@ -2486,16 +2869,36 @@ static int dclay_SizingMinMax(lua_State* L, Clay__SizingType type)
     return 1;
 }
 
+/**
+ * Creates an axis that grows within optional bounds.
+ * @name clay.sizing_grow(min, max)
+ * @param min [type: number|nil] Minimum size; defaults to zero.
+ * @param max [type: number|nil] Maximum size; defaults to unbounded.
+ * @return sizing [type: clay.SizingAxis] Sizing descriptor.
+ */
 static int dclay_SizingGrow(lua_State* L)
 {
     return dclay_SizingMinMax(L, CLAY__SIZING_TYPE_GROW);
 }
 
+/**
+ * Creates a fit-content axis within optional bounds.
+ * @name clay.sizing_fit(min, max)
+ * @param min [type: number|nil] Minimum size; defaults to zero.
+ * @param max [type: number|nil] Maximum size; defaults to unbounded.
+ * @return sizing [type: clay.SizingAxis] Sizing descriptor.
+ */
 static int dclay_SizingFit(lua_State* L)
 {
     return dclay_SizingMinMax(L, CLAY__SIZING_TYPE_FIT);
 }
 
+/**
+ * Creates an axis sized to a fraction of its parent.
+ * @name clay.sizing_percent(percent)
+ * @param percent [type: number] Parent-relative size factor.
+ * @return sizing [type: clay.SizingAxis] Sizing descriptor.
+ */
 static int dclay_SizingPercent(lua_State* L)
 {
     float            percent = (float)luaL_checknumber(L, 1);
@@ -2506,6 +2909,13 @@ static int dclay_SizingPercent(lua_State* L)
     return 1;
 }
 
+/**
+ * Creates a text declaration for an element's children array.
+ * @name clay.text(text, config)
+ * @param text [type: string] Text content.
+ * @param config [type: clay.TextConfig] Text layout and rendering configuration.
+ * @return text_element [type: clay.Text] Mutable text declaration.
+ */
 static int dclay_Text(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2570,6 +2980,14 @@ static Clay_Vector2 dclay_ScreenToLayoutPosition(dclay_surface_t* surface, float
     };
 }
 
+/**
+ * Updates pointer hit testing for the previous completed layout. Call before begin_layout().
+ * @name clay.set_pointer_state(surface, x, y, pressed)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param x [type: number] Defold screen X coordinate, normally action.screen_x.
+ * @param y [type: number] Defold screen Y coordinate, normally action.screen_y.
+ * @param pressed [type: boolean] Whether the pointer is currently pressed.
+ */
 static int dclay_SetPointerState(lua_State* L)
 {
     DM_PROFILE("ClaySetPointerState");
@@ -2596,6 +3014,15 @@ static int dclay_SetPointerState(lua_State* L)
     return 0;
 }
 
+/**
+ * Updates Clay scroll containers from the previous layout. Call before begin_layout().
+ * @name clay.update_scroll_containers(surface, enable_drag_scrolling, scroll_x, scroll_y, dt)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param enable_drag_scrolling [type: boolean] Enable pointer-drag scrolling.
+ * @param scroll_x [type: number] Horizontal scroll delta.
+ * @param scroll_y [type: number] Vertical scroll delta.
+ * @param dt [type: number] Frame delta time in seconds.
+ */
 static int dclay_UpdateScrollContainers(lua_State* L)
 {
     DM_PROFILE("ClayUpdateScrollContainers");
@@ -2626,6 +3053,12 @@ static int dclay_UpdateScrollContainers(lua_State* L)
     return 0;
 }
 
+/**
+ * Returns Clay's current pointer data in layout coordinates.
+ * @name clay.get_pointer_state(surface)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @return pointer [type: clay.PointerData] Current pointer data.
+ */
 static int dclay_GetPointerState(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2639,6 +3072,13 @@ static int dclay_GetPointerState(lua_State* L)
     return 1;
 }
 
+/**
+ * Returns whether the pointer overlaps a globally identified element in the previous layout.
+ * @name clay.hovered(surface, id) / clay.pointer_over(surface, id)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param id [type: clay.ElementId] Global element ID; local IDs cannot be queried outside their parent traversal.
+ * @return hovered [type: boolean] True when the pointer overlaps the element.
+ */
 static int dclay_PointerOver(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2652,6 +3092,12 @@ static int dclay_PointerOver(lua_State* L)
     return 1;
 }
 
+/**
+ * Returns the numeric Clay IDs under the current pointer.
+ * @name clay.get_pointer_over_ids(surface)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @return ids [type: table<integer, integer>] Numeric element IDs in hit-test traversal order.
+ */
 static int dclay_GetPointerOverIds(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2672,6 +3118,13 @@ static int dclay_GetPointerOverIds(lua_State* L)
     return 1;
 }
 
+/**
+ * Returns retained scroll state for a globally identified clipped element.
+ * @name clay.get_scroll_container_data(surface, id)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param id [type: clay.ElementId] Global scroll-container ID.
+ * @return data [type: clay.ScrollContainerData|nil] Scroll state, or nil when the container was not found.
+ */
 static int dclay_GetScrollContainerData(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2709,6 +3162,15 @@ static int dclay_GetScrollContainerData(lua_State* L)
     return 1;
 }
 
+/**
+ * Sets the retained offset of a globally identified scroll container.
+ * @name clay.set_scroll_position(surface, id, x, y)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param id [type: clay.ElementId] Global scroll-container ID.
+ * @param x [type: number] Horizontal scroll offset.
+ * @param y [type: number] Vertical scroll offset.
+ * @return found [type: boolean] True when the scroll container was found.
+ */
 static int dclay_SetScrollPosition(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2732,6 +3194,12 @@ static int dclay_SetScrollPosition(lua_State* L)
     return 1;
 }
 
+/**
+ * Enables or disables Clay offscreen element culling.
+ * @name clay.set_culling_enabled(surface, enabled)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param enabled [type: boolean] Whether culling is enabled.
+ */
 static int dclay_SetCullingEnabled(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
@@ -2744,6 +3212,12 @@ static int dclay_SetCullingEnabled(lua_State* L)
     return 0;
 }
 
+/**
+ * Enables or disables Clay's built-in debug overlay for one surface.
+ * @name clay.set_debug_mode_enabled(surface, enabled)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param enabled [type: boolean] Whether the debug overlay is enabled. Enabling requires a GUI font named Default or default.
+ */
 static int dclay_SetDebugModeEnabled(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);
@@ -2769,6 +3243,12 @@ static int dclay_SetDebugModeEnabled(lua_State* L)
     return 0;
 }
 
+/**
+ * Returns whether Clay's built-in debug overlay is enabled.
+ * @name clay.is_debug_mode_enabled(surface)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @return enabled [type: boolean] Whether the debug overlay is enabled.
+ */
 static int dclay_IsDebugModeEnabled(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
@@ -2781,6 +3261,11 @@ static int dclay_IsDebugModeEnabled(lua_State* L)
     return 1;
 }
 
+/**
+ * Deletes generated GUI nodes and releases a surface. Call from the GUI script's final() function.
+ * @name clay.destroy(surface)
+ * @param surface [type: clay.Surface] Clay surface.
+ */
 static int dclay_Destroy(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 0);

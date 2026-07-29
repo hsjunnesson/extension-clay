@@ -1,502 +1,520 @@
+# Auto generated from utils/update_script_api.py. Do not edit manually.
 - name: clay
   type: table
-  desc: Functions and constants for building Clay UI layouts.
+  desc: "Functions and constants for building Clay layouts with retained Defold GUI nodes."
   members:
   - name: initialize
     type: function
-    desc: Creates a Clay layout surface whose retained GUI nodes are parented to the supplied GUI node. max_element_count determines the Clay arena and per-layout metadata capacity for this surface and defaults to 8192. Destroy and recreate the surface to change it.
+    desc: "Creates a Clay surface rooted at a Defold GUI node."
     parameters:
     - name: root_node
-      type: userdata
-      desc: GUI node used as the layout bounds and parent for generated nodes.
+      type: "node"
+      desc: "GUI node used as the layout bounds and parent for generated nodes."
     - name: max_element_count
-      type: number
-      desc: Optional maximum number of Clay elements for this surface. Defaults to 8192.
+      type: "integer"
+      desc: "Element capacity for this surface; defaults to 8192."
       optional: true
     returns:
-    - type: userdata
-      desc: Clay surface handle.
+    - name: surface
+      type: "clay.Surface"
+      desc: "New Clay surface."
 
   - name: destroy
     type: function
-    desc: Deletes generated GUI nodes and releases a Clay surface. Call from the GUI script final function.
+    desc: "Deletes generated GUI nodes and releases a surface. Call from the GUI script's final() function."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
 
   - name: begin_layout
     type: function
-    desc: Begins a new Clay layout. The layout dimensions are synchronized automatically from the initialized root GUI node's effective on-screen bounds, including window adjustment.
+    desc: "Begins a layout and synchronizes its dimensions from the root GUI node."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
 
   - name: element
     type: function
-    desc: Retains a root element declaration. Supports id, layout, floating, transition, background_color, overlay_color, corner_radius, border, clip, image, layer, slice9, children, and on_hover. layer accepts a GUI layer name or hash and applies only to this element's render commands; layers are not inherited. A transition requires duration and a property bitmask assembled from TRANSITION_PROPERTY_* constants; Clay interpolates between the element's previous and current declared state using its native ease-out handler. Enter, exit, and rounded-corner transitions are not currently exposed. Transitioned elements should use stable IDs. floating accepts offset, expand, parent_id, z_index, attach_points, pointer_capture_mode, attach_to, and clip_to. ATTACH_TO_ELEMENT_WITH_ID requires parent_id to be a global ID declared earlier in the tree. Set clip.scroll to true to use Clay's managed scroll offset for a horizontally and/or vertically clipped element. on_hover(element, pointer) runs during end_layout while that native element is open, so it supports local IDs and may mutate visual or layout fields for the current layout. pointer contains x, y, and state. An image can be a GUI texture name or hash, or a table with texture and optional atlas animation names or hashes. corner_radius is rendered on background rectangles and ordinary images by the Clay GUI material. If an image also has a nonzero slice9, slice9 is preserved and shader rounding is disabled because Defold's nine independently interpolated patches do not provide one continuous shape coordinate. slice9 must be a vmath.vector4 and is forwarded independently to the generated Defold GUI node.
+    desc: "Retains a root element declaration for the current layout."
     parameters:
     - name: element
-      type: table
-      desc: Element declaration. The id may be nil, string, hash, or a value returned by a Clay id helper. on_hover must be a function when supplied.
+      type: "clay.Element"
+      desc: "Declarative element tree."
 
   - name: end_layout
     type: function
-    desc: Completes the layout and reconciles Clay render commands with retained GUI nodes.
+    desc: "Completes the layout and reconciles Clay render commands with retained GUI nodes."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: dt
-      type: number
-      desc: Optional frame delta time in seconds. Defaults to zero.
+      type: "number"
+      desc: "Frame delta time in seconds; defaults to zero."
       optional: true
 
   - name: text
     type: function
-    desc: Creates a text-node declaration for use in an element's children array.
+    desc: "Creates a text declaration for an element's children array."
     parameters:
     - name: text
-      type: string
-      desc: Text to display.
+      type: "string"
+      desc: "Text content."
     - name: config
-      type: table
-      desc: Text configuration. font_id is required and accepts a GUI font name or hash. font_size defaults to the size authored in that font resource. Optional fields are text_color, letter_spacing, line_height, and layer. layer accepts a GUI layer name or hash and is not inherited.
+      type: "clay.TextConfig"
+      desc: "Text layout and rendering configuration."
     returns:
-    - type: table
-      desc: A Clay text-node declaration.
+    - name: text_element
+      type: "clay.Text"
+      desc: "Mutable text declaration."
 
   - name: id
     type: function
-    desc: Creates a global Clay string id.
+    desc: "Creates a global Clay string ID."
     parameters:
     - name: value
-      type: string
-      desc: Id string.
+      type: "string"
+      desc: "ID string."
     returns:
-    - type: userdata
-      desc: Clay id descriptor.
+    - name: id
+      type: "clay.Id"
+      desc: "Clay ID descriptor."
 
   - name: idi
     type: function
-    desc: Creates an indexed global Clay id.
+    desc: "Creates an indexed global Clay ID."
     parameters:
     - name: value
-      type: string
-      desc: Base id string.
+      type: "string"
+      desc: "Base ID string."
     - name: index
-      type: number
-      desc: Numeric id offset.
+      type: "integer"
+      desc: "Numeric ID offset."
     returns:
-    - type: userdata
-      desc: Clay id descriptor.
+    - name: id
+      type: "clay.Id"
+      desc: "Clay ID descriptor."
 
   - name: id_local
     type: function
-    desc: Creates a Clay id local to the currently open parent element.
+    desc: "Creates a Clay ID local to the currently open parent element."
     parameters:
     - name: value
-      type: string
-      desc: Id string.
+      type: "string"
+      desc: "ID string."
     returns:
-    - type: userdata
-      desc: Clay id descriptor.
+    - name: id
+      type: "clay.Id"
+      desc: "Clay ID descriptor."
 
   - name: idi_local
     type: function
-    desc: Creates an indexed Clay id local to the currently open parent element.
+    desc: "Creates an indexed Clay ID local to the currently open parent element."
     parameters:
     - name: value
-      type: string
-      desc: Base id string.
+      type: "string"
+      desc: "Base ID string."
     - name: index
-      type: number
-      desc: Numeric id offset.
+      type: "integer"
+      desc: "Numeric ID offset."
     returns:
-    - type: userdata
-      desc: Clay id descriptor.
+    - name: id
+      type: "clay.Id"
+      desc: "Clay ID descriptor."
 
   - name: sizing_fixed
     type: function
-    desc: Creates a fixed-size Clay sizing axis.
+    desc: "Creates a fixed-size axis."
     parameters:
     - name: size
-      type: number
-      desc: Fixed size in pixels.
+      type: "number"
+      desc: "Size in layout pixels."
     returns:
-    - type: userdata
-      desc: Clay sizing descriptor.
+    - name: sizing
+      type: "clay.SizingAxis"
+      desc: "Sizing descriptor."
 
   - name: sizing_grow
     type: function
-    desc: Creates a growing Clay sizing axis with optional bounds.
+    desc: "Creates an axis that grows within optional bounds."
     parameters:
     - name: min
-      type: number
-      desc: Optional minimum size. Defaults to zero.
+      type: "number"
+      desc: "Minimum size; defaults to zero."
       optional: true
     - name: max
-      type: number
-      desc: Optional maximum size. Defaults to unbounded.
+      type: "number"
+      desc: "Maximum size; defaults to unbounded."
       optional: true
     returns:
-    - type: userdata
-      desc: Clay sizing descriptor.
+    - name: sizing
+      type: "clay.SizingAxis"
+      desc: "Sizing descriptor."
 
   - name: sizing_fit
     type: function
-    desc: Creates a fit-content Clay sizing axis with optional bounds.
+    desc: "Creates a fit-content axis within optional bounds."
     parameters:
     - name: min
-      type: number
-      desc: Optional minimum size. Defaults to zero.
+      type: "number"
+      desc: "Minimum size; defaults to zero."
       optional: true
     - name: max
-      type: number
-      desc: Optional maximum size. Defaults to unbounded.
+      type: "number"
+      desc: "Maximum size; defaults to unbounded."
       optional: true
     returns:
-    - type: userdata
-      desc: Clay sizing descriptor.
+    - name: sizing
+      type: "clay.SizingAxis"
+      desc: "Sizing descriptor."
 
   - name: sizing_percent
     type: function
-    desc: Creates a Clay sizing axis relative to its parent.
+    desc: "Creates an axis sized to a fraction of its parent."
     parameters:
     - name: percent
-      type: number
-      desc: Parent-relative size factor.
+      type: "number"
+      desc: "Parent-relative size factor."
     returns:
-    - type: userdata
-      desc: Clay sizing descriptor.
+    - name: sizing
+      type: "clay.SizingAxis"
+      desc: "Sizing descriptor."
 
   - name: set_pointer_state
     type: function
-    desc: Hit-tests the previous completed layout and updates Clay's pointer state. Call before begin_layout. The screen position is transformed into the initialized root GUI node's top-left layout space.
+    desc: "Updates pointer hit testing for the previous completed layout. Call before begin_layout()."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: x
-      type: number
-      desc: Defold screen-space pointer x coordinate, normally action.screen_x.
+      type: "number"
+      desc: "Defold screen X coordinate, normally action.screen_x."
     - name: y
-      type: number
-      desc: Defold screen-space pointer y coordinate, normally action.screen_y.
+      type: "number"
+      desc: "Defold screen Y coordinate, normally action.screen_y."
     - name: pressed
-      type: boolean
-      desc: Whether the pointer is currently pressed.
+      type: "boolean"
+      desc: "Whether the pointer is currently pressed."
 
   - name: get_pointer_state
     type: function
-    desc: Returns Clay's current pointer coordinates and interaction state.
+    desc: "Returns Clay's current pointer data in layout coordinates."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     returns:
-    - type: table
-      desc: Table with x, y, and state fields.
+    - name: pointer
+      type: "clay.PointerData"
+      desc: "Current pointer data."
 
   - name: hovered
     type: function
-    desc: Returns whether the pointer overlaps a globally identified element in the previous completed layout. This is an alias for pointer_over.
+    desc: "Returns whether the pointer overlaps a globally identified element in the previous layout."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: id
-      type: any
-      desc: String, Defold hash, or global Clay id helper value.
+      type: "clay.ElementId"
+      desc: "Global element ID; local IDs cannot be queried outside their parent traversal."
     returns:
-    - type: boolean
-      desc: True when the pointer overlaps the element.
+    - name: hovered
+      type: "boolean"
+      desc: "True when the pointer overlaps the element."
 
   - name: pointer_over
     type: function
-    desc: Returns whether the pointer overlaps a globally identified element in the previous completed layout.
+    desc: "Returns whether the pointer overlaps a globally identified element in the previous layout."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: id
-      type: any
-      desc: String, Defold hash, or global Clay id helper value.
+      type: "clay.ElementId"
+      desc: "Global element ID; local IDs cannot be queried outside their parent traversal."
     returns:
-    - type: boolean
-      desc: True when the pointer overlaps the element.
+    - name: hovered
+      type: "boolean"
+      desc: "True when the pointer overlaps the element."
 
   - name: get_pointer_over_ids
     type: function
-    desc: Returns the numeric Clay ids under the current pointer, ordered by Clay's hit-test traversal.
+    desc: "Returns the numeric Clay IDs under the current pointer."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     returns:
-    - type: table
-      desc: Array of numeric Clay ids.
+    - name: ids
+      type: "table<integer, integer>"
+      desc: "Numeric element IDs in hit-test traversal order."
 
   - name: update_scroll_containers
     type: function
-    desc: Applies wheel deltas, pointer dragging, and momentum to Clay scroll containers from the previous layout. Call after set_pointer_state and before begin_layout every frame.
+    desc: "Updates Clay scroll containers from the previous layout. Call before begin_layout()."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: enable_drag_scrolling
-      type: boolean
-      desc: Enables pointer-drag scrolling.
+      type: "boolean"
+      desc: "Enable pointer-drag scrolling."
     - name: scroll_x
-      type: number
-      desc: Horizontal scroll delta.
+      type: "number"
+      desc: "Horizontal scroll delta."
     - name: scroll_y
-      type: number
-      desc: Vertical scroll delta.
+      type: "number"
+      desc: "Vertical scroll delta."
     - name: dt
-      type: number
-      desc: Frame delta time in seconds.
+      type: "number"
+      desc: "Frame delta time in seconds."
 
   - name: get_scroll_container_data
     type: function
-    desc: Returns the retained scroll state for a globally identified clipped element, or nil when it has not completed a layout as a scroll container.
+    desc: "Returns retained scroll state for a globally identified clipped element."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: id
-      type: any
-      desc: String, Defold hash, or global Clay id helper value.
+      type: "clay.ElementId"
+      desc: "Global scroll-container ID."
     returns:
-    - type: [table, nil]
-      desc: Table with position, container_size, content_size, horizontal, and vertical fields, or nil.
+    - name: data
+      type: "clay.ScrollContainerData|nil"
+      desc: "Scroll state, or nil when the container was not found."
 
   - name: set_scroll_position
     type: function
-    desc: Sets the retained offset of a globally identified scroll container. Values normally range from negative overflow to zero.
+    desc: "Sets the retained offset of a globally identified scroll container."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: id
-      type: any
-      desc: String, Defold hash, or global Clay id helper value.
+      type: "clay.ElementId"
+      desc: "Global scroll-container ID."
     - name: x
-      type: number
-      desc: Horizontal scroll offset.
+      type: "number"
+      desc: "Horizontal scroll offset."
     - name: y
-      type: number
-      desc: Vertical scroll offset.
+      type: "number"
+      desc: "Vertical scroll offset."
     returns:
-    - type: boolean
-      desc: True when the scroll container was found.
+    - name: found
+      type: "boolean"
+      desc: "True when the scroll container was found."
 
   - name: set_culling_enabled
     type: function
-    desc: Enables or disables Clay offscreen element culling.
+    desc: "Enables or disables Clay offscreen element culling."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: enabled
-      type: boolean
-      desc: Whether culling is enabled.
+      type: "boolean"
+      desc: "Whether culling is enabled."
 
   - name: set_debug_mode_enabled
     type: function
-    desc: Enables or disables Clay's built-in debug layout for one surface. Enabling requires a GUI font named Default or default, which is reserved as Clay font id zero.
+    desc: "Enables or disables Clay's built-in debug overlay for one surface."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     - name: enabled
-      type: boolean
-      desc: Whether the Clay debug layout is enabled.
+      type: "boolean"
+      desc: "Whether the debug overlay is enabled. Enabling requires a GUI font named Default or default."
 
   - name: is_debug_mode_enabled
     type: function
-    desc: Returns whether Clay's built-in debug layout is enabled for a surface.
+    desc: "Returns whether Clay's built-in debug overlay is enabled."
     parameters:
     - name: surface
-      type: userdata
-      desc: Clay surface returned by initialize.
+      type: "clay.Surface"
+      desc: "Clay surface."
     returns:
-    - type: boolean
-      desc: Whether the debug layout is enabled.
+    - name: enabled
+      type: "boolean"
+      desc: "Whether the debug overlay is enabled."
 
   - name: LEFT_TO_RIGHT
     type: constant
-    desc: Horizontal child layout direction.
+    desc: "Lay children out horizontally."
 
   - name: TOP_TO_BOTTOM
     type: constant
-    desc: Vertical child layout direction.
+    desc: "Lay children out vertically."
 
   - name: ALIGN_X_LEFT
     type: constant
-    desc: Align children to the left.
+    desc: "Align children to the left."
 
   - name: ALIGN_X_RIGHT
     type: constant
-    desc: Align children to the right.
+    desc: "Align children to the right."
 
   - name: ALIGN_X_CENTER
     type: constant
-    desc: Center children horizontally.
+    desc: "Center children horizontally."
 
   - name: ALIGN_Y_TOP
     type: constant
-    desc: Align children to the top.
+    desc: "Align children to the top."
 
   - name: ALIGN_Y_BOTTOM
     type: constant
-    desc: Align children to the bottom.
+    desc: "Align children to the bottom."
 
   - name: ALIGN_Y_CENTER
     type: constant
-    desc: Center children vertically.
+    desc: "Center children vertically."
 
   - name: ATTACH_POINT_LEFT_TOP
     type: constant
-    desc: Floating attachment point at the left top.
+    desc: "Left-top floating attachment point."
 
   - name: ATTACH_POINT_LEFT_CENTER
     type: constant
-    desc: Floating attachment point at the left center.
+    desc: "Left-center floating attachment point."
 
   - name: ATTACH_POINT_LEFT_BOTTOM
     type: constant
-    desc: Floating attachment point at the left bottom.
+    desc: "Left-bottom floating attachment point."
 
   - name: ATTACH_POINT_CENTER_TOP
     type: constant
-    desc: Floating attachment point at the center top.
+    desc: "Center-top floating attachment point."
 
   - name: ATTACH_POINT_CENTER_CENTER
     type: constant
-    desc: Floating attachment point at the center.
+    desc: "Center floating attachment point."
 
   - name: ATTACH_POINT_CENTER_BOTTOM
     type: constant
-    desc: Floating attachment point at the center bottom.
+    desc: "Center-bottom floating attachment point."
 
   - name: ATTACH_POINT_RIGHT_TOP
     type: constant
-    desc: Floating attachment point at the right top.
+    desc: "Right-top floating attachment point."
 
   - name: ATTACH_POINT_RIGHT_CENTER
     type: constant
-    desc: Floating attachment point at the right center.
+    desc: "Right-center floating attachment point."
 
   - name: ATTACH_POINT_RIGHT_BOTTOM
     type: constant
-    desc: Floating attachment point at the right bottom.
+    desc: "Right-bottom floating attachment point."
 
   - name: POINTER_CAPTURE_MODE_CAPTURE
     type: constant
-    desc: Floating element captures pointer interaction from elements behind it.
+    desc: "Capture pointer interaction from elements behind a floating element."
 
   - name: POINTER_CAPTURE_MODE_PASSTHROUGH
     type: constant
-    desc: Pointer interaction passes through the floating element.
+    desc: "Pass pointer interaction through a floating element."
 
   - name: ATTACH_TO_NONE
     type: constant
-    desc: Disables floating behavior.
+    desc: "Disable floating behavior."
 
   - name: ATTACH_TO_PARENT
     type: constant
-    desc: Attaches a floating element to its declarative parent.
+    desc: "Attach a floating element to its declarative parent."
 
   - name: ATTACH_TO_ELEMENT_WITH_ID
     type: constant
-    desc: Attaches a floating element to the global ID in floating.parent_id.
+    desc: "Attach a floating element to floating.parent_id."
 
   - name: ATTACH_TO_ROOT
     type: constant
-    desc: Attaches a floating element to the Clay layout root.
+    desc: "Attach a floating element to the layout root."
 
   - name: CLIP_TO_NONE
     type: constant
-    desc: Floating element does not inherit its attached element's clipping.
+    desc: "Do not inherit the attached element's clipping."
 
   - name: CLIP_TO_ATTACHED_PARENT
     type: constant
-    desc: Floating element inherits its attached element's clipping.
+    desc: "Inherit the attached element's clipping."
 
   - name: TRANSITION_PROPERTY_NONE
     type: constant
-    desc: No transition properties.
+    desc: "No transition properties."
 
   - name: TRANSITION_PROPERTY_X
     type: constant
-    desc: Transition the element's horizontal position.
+    desc: "Transition horizontal position."
 
   - name: TRANSITION_PROPERTY_Y
     type: constant
-    desc: Transition the element's vertical position.
+    desc: "Transition vertical position."
 
   - name: TRANSITION_PROPERTY_POSITION
     type: constant
-    desc: Transition both position axes.
+    desc: "Transition both position axes."
 
   - name: TRANSITION_PROPERTY_WIDTH
     type: constant
-    desc: Transition the element width.
+    desc: "Transition width."
 
   - name: TRANSITION_PROPERTY_HEIGHT
     type: constant
-    desc: Transition the element height.
+    desc: "Transition height."
 
   - name: TRANSITION_PROPERTY_DIMENSIONS
     type: constant
-    desc: Transition width and height.
+    desc: "Transition width and height."
 
   - name: TRANSITION_PROPERTY_BOUNDING_BOX
     type: constant
-    desc: Transition position and dimensions.
+    desc: "Transition position and dimensions."
 
   - name: TRANSITION_PROPERTY_BACKGROUND_COLOR
     type: constant
-    desc: Transition the background color.
+    desc: "Transition background color."
 
   - name: TRANSITION_PROPERTY_OVERLAY_COLOR
     type: constant
-    desc: Transition the overlay color.
+    desc: "Transition overlay color."
 
   - name: TRANSITION_PROPERTY_BORDER_COLOR
     type: constant
-    desc: Transition the border color.
+    desc: "Transition border color."
 
   - name: TRANSITION_PROPERTY_BORDER_WIDTH
     type: constant
-    desc: Transition the border widths.
+    desc: "Transition border widths."
 
   - name: TRANSITION_PROPERTY_BORDER
     type: constant
-    desc: Transition border color and widths.
+    desc: "Transition border color and widths."
 
   - name: TRANSITION_DISABLE_INTERACTIONS_WHILE_TRANSITIONING_POSITION
     type: constant
-    desc: Disable pointer interactions while position is transitioning.
+    desc: "Disable interactions while position is transitioning."
 
   - name: TRANSITION_ALLOW_INTERACTIONS_WHILE_TRANSITIONING_POSITION
     type: constant
-    desc: Allow pointer interactions while position is transitioning.
+    desc: "Allow interactions while position is transitioning."
 
   - name: POINTER_PRESSED_THIS_FRAME
     type: constant
-    desc: Pointer transitioned to pressed during the latest pointer update.
+    desc: "Pointer changed to pressed this frame."
 
   - name: POINTER_PRESSED
     type: constant
-    desc: Pointer remains pressed.
+    desc: "Pointer remains pressed."
 
   - name: POINTER_RELEASED_THIS_FRAME
     type: constant
-    desc: Pointer transitioned to released during the latest pointer update.
+    desc: "Pointer changed to released this frame."
 
   - name: POINTER_RELEASED
     type: constant
-    desc: Pointer remains released.
+    desc: "Pointer remains released."
