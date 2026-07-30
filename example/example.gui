@@ -33,6 +33,9 @@ layers {
   name: "background"
 }
 layers {
+  name: "borders"
+}
+layers {
   name: "text"
 }
 layers {
@@ -43,6 +46,9 @@ layers {
 }
 layers {
   name: "tooltip_text"
+}
+layers {
+  name: "tooltip_borders"
 }
 material: "/clay/materials/gui.material"
 adjust_reference: ADJUST_REFERENCE_PARENT

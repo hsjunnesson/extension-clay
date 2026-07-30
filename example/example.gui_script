@@ -18,11 +18,13 @@ function init(self)
 	self.h.mouse_button_left = hash("mouse_button_left")
 	self.h.heading = hash("heading")
 	self.h.background = hash("background")
+	self.h.borders = hash("borders")
 	self.h.text = hash("text")
 	self.h.icon = hash("icon")
 	self.h.square = hash("square")
 	self.h.tooltip_background = hash("tooltip_background")
 	self.h.tooltip_text = hash("tooltip_text")
+	self.h.tooltip_borders = hash("tooltip_borders")
 	self.h.example = hash("example")
 	self.h.square = hash("square")
 	self.h.whep = hash("whep")
@@ -67,6 +69,7 @@ local function cell_on_hover(t, pointer)
 	local tooltip = t.tooltip
 	tooltip.floating.offset.x = pointer.x + 12
 	tooltip.floating.offset.y = pointer.y + 12
+	tooltip.border.color = vmath.vector4(1.0, 1.0, 1.0, 0.96)
 	tooltip.background_color = vmath.vector4(0.04, 0.05, 0.07, 0.96)
 	tooltip.children[1].text = string.format("Pointer: %d, %d", pointer.x, pointer.y)
 	tooltip.children[1].config.text_color = vmath.vector4(1, 1, 1, 1)
@@ -91,7 +94,12 @@ local function get_grid(self)
 				clip_to = clay.CLIP_TO_NONE,
 			},
 			corner_radius = 6,
-			background_color = vmath.vector4(0, 0, 0, 0),
+			border = {
+				width = 1,
+				color = vmath.vector4(0.0),
+				layer = self.h.tooltip_borders,
+			},
+			background_color = vmath.vector4(0.0),
 			layer = self.h.tooltip_background,
 			children = {
 				clay.text("", {
@@ -213,7 +221,8 @@ local function get_grid(self)
 			self.grid.children[y].children[x].background_color = vmath.vector3(0.18, 0.22, 0.3)
 		end
 	end
-	self.tooltip.background_color = vmath.vector4(0, 0, 0, 0)
+	self.tooltip.border.color = vmath.vector4(0)
+	self.tooltip.background_color = vmath.vector4(0)
 	self.tooltip.children[1].text = ""
 	self.tooltip.children[1].config.text_color = vmath.vector4(1, 1, 1, 0)
 	
@@ -288,6 +297,11 @@ function update(self, dt)
 								end
 							end,
 							corner_radius = 6,
+							border = {
+								width = 1,
+								color = vmath.vector3(1, 1, 1),
+								layer = self.h.borders,
+							},
 							layer = self.h.background,
 							children = {
 								clay.text("Add Row", {
@@ -321,6 +335,11 @@ function update(self, dt)
 								end
 							end,
 							corner_radius = 6,
+							border = {
+								width = 1,
+								color = vmath.vector3(1, 1, 1),
+								layer = self.h.borders,
+							},
 							layer = self.h.background,
 							children = {
 								clay.text("Add 10 Rows", {
@@ -332,7 +351,7 @@ function update(self, dt)
 							},
 						},
 						{
-							id = clay.id_local("resize"),
+							id = clay.id_local("grow"),
 							layout = {
 								sizing = {
 									width = clay.sizing_fit(64),
@@ -355,9 +374,14 @@ function update(self, dt)
 								end
 							end,
 							corner_radius = 6,
+							border = {
+								width = 1,
+								color = vmath.vector3(1, 1, 1),
+								layer = self.h.borders,
+							},
 							layer = self.h.background,
 							children = {
-								clay.text("Resize", {
+								clay.text("Grow", {
 									font_id = self.h.heading,
 									font_size = 16,
 									layer = self.h.text,
@@ -365,6 +389,7 @@ function update(self, dt)
 								}),
 							},
 						},
+
 					},
 				},
 				-- Nine-slice example

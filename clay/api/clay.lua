@@ -264,6 +264,7 @@ clay = {}
 ---@class clay.Border
 ---@field width integer|clay.BorderWidth One width for every side or per-side widths.
 ---@field color? clay.Color Border color; defaults to white.
+---@field layer? string|hash Explicit GUI layer for the border command; defaults to Defold's unnamed layer.
 
 ---Defold GUI image configuration.
 ---@class clay.Image

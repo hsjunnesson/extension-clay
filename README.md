@@ -11,7 +11,7 @@ Add a release ZIP of this repository to your project's `dependencies` in `game.p
 In the GUI scene that will host the layout:
 
 - Add a box node to use as the Clay root. Its effective on-screen size defines the layout dimensions.
-- Set the GUI material to `/clay/materials/gui.material`. This supplies the rounded-rectangle shader.
+- Set the GUI material to `/clay/materials/gui.material`. This supplies the rounded-rectangle and border shader.
 - Add every font, texture, atlas, and layer referenced by the Clay declarations to the GUI scene.
 - Raise the GUI scene's `Max Nodes` value when the generated interface can exceed the default node capacity.
 - Add a font named `Default` if you want to use Clay's debug overlay.
@@ -88,6 +88,8 @@ Text refers to fonts already registered on the GUI scene. The same Defold font r
 Clay scissor commands become Defold stencil clipping nodes. Because Defold clipping is hierarchy-based, commands inside a clip scope are parented beneath the generated clipping node. Clay supports one-axis clipping; the backend expands the other axis because Defold stencil clipping always clips both.
 
 GUI layers are explicit and are not inherited through the Clay tree. Assigning graphics and text to separate scene layers can turn an alternating sequence of boxes and text into a small number of batches, but it also changes global compositing order.
+
+Clay's border command becomes one full-size, transparent-interior GUI box rather than four thin side nodes. Per-side widths, color, and corner radii are passed to the GUI material, which draws an antialiased SDF border ring. Borders do not use the element's top-level layer: set `border.layer` explicitly when a dedicated border layer is needed, otherwise the border node uses Defold's unnamed layer. Keeping backgrounds and borders on separate layers prevents their differing per-node shader constants from interleaving otherwise batchable backgrounds.
 
 ### Fixed surface lifetime
 

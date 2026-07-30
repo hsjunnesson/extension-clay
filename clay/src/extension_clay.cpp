@@ -176,6 +176,7 @@ struct dclay_image_t
 struct dclay_user_data_t
 {
     dmhash_t         layer;
+    dmhash_t         border_layer;
     dmVMath::Vector4 slice9;
 };
 
@@ -196,7 +197,8 @@ struct dclay_gui_node_t
     dclay_gui_node_type_t type;
     bool                  rounded_rect_constants_set;
     bool                  shape_uv_transform_set;
-    PAD(2);
+    bool                  border_constants_set;
+    PAD(1);
     dmhash_t         texture;
     dmhash_t         animation;
     dmhash_t         layer;
@@ -204,6 +206,8 @@ struct dclay_gui_node_t
     dmVMath::Vector4 corner_radii;
     dmVMath::Vector4 shape_uv_transform_x;
     dmVMath::Vector4 shape_uv_transform_y;
+    dmVMath::Vector4 border_color;
+    dmVMath::Vector4 border_width;
 };
 
 STRUCT_ALIGN(8)
@@ -488,6 +492,7 @@ static bool             g_PixelPerfect = 0;
  * Border configuration.
  * @field width [type: integer|clay.BorderWidth] One width for every side or per-side widths.
  * @field color [type: clay.Color|nil] Border color; defaults to white.
+ * @field layer [type: string|hash|nil] Explicit GUI layer for the border command; defaults to Defold's unnamed layer.
  */
 
 /**
@@ -974,6 +979,7 @@ static dclay_user_data_t dclay_ParseUserData(lua_State* L, int table_index)
 {
     dclay_user_data_t user_data;
     user_data.layer = 0;
+    user_data.border_layer = 0;
     user_data.slice9 = dmVMath::Vector4(0.0f);
 
     table_index = dclay_AbsIndex(L, table_index);
@@ -982,6 +988,18 @@ static dclay_user_data_t dclay_ParseUserData(lua_State* L, int table_index)
     if (!lua_isnil(L, -1))
     {
         user_data.layer = dclay_CheckHashOrString(L, -1, "layer");
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, table_index, "border");
+    if (lua_istable(L, -1))
+    {
+        lua_getfield(L, -1, "layer");
+        if (!lua_isnil(L, -1))
+        {
+            user_data.border_layer = dclay_CheckHashOrString(L, -1, "border.layer");
+        }
+        lua_pop(L, 1);
     }
     lua_pop(L, 1);
 
@@ -997,7 +1015,7 @@ static dclay_user_data_t dclay_ParseUserData(lua_State* L, int table_index)
 
 static dclay_user_data_t* dclay_StoreUserData(lua_State* L, const dclay_user_data_t& value)
 {
-    if (value.layer == 0 && dclay_IsZeroVector4(value.slice9))
+    if (value.layer == 0 && value.border_layer == 0 && dclay_IsZeroVector4(value.slice9))
     {
         return 0;
     }
@@ -1389,6 +1407,18 @@ static void dclay_ValidateNodeIds(lua_State* L, int index)
     }
     lua_pop(L, 1);
 
+    lua_getfield(L, index, "border");
+    if (lua_istable(L, -1))
+    {
+        lua_getfield(L, -1, "layer");
+        if (!lua_isnil(L, -1))
+        {
+            dclay_CheckHashOrString(L, -1, "border.layer");
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+
     lua_getfield(L, index, "on_hover");
     if (!lua_isnil(L, -1) && !lua_isfunction(L, -1))
     {
@@ -1739,16 +1769,21 @@ static void dclay_GetPivotFactors(dmGui::Pivot pivot, float* x, float* y)
     *y = factors[index][1];
 }
 
-static uint64_t dclay_CommandKey(const Clay_RenderCommand& command, dclay_gui_node_type_t type, uint16_t role)
+static uint64_t dclay_CommandKey(const Clay_RenderCommand& command, dclay_gui_node_type_t type)
 {
-    return ((uint64_t)command.id << 32) | ((uint32_t)type << 16) | role;
+    return ((uint64_t)command.id << 32) | (uint32_t)type;
 }
 
 static void dclay_ApplyCommandLayer(dclay_surface_t* surface, dclay_gui_node_t* entry, const Clay_RenderCommand& command)
 {
     const dmhash_t     default_layer = dmHashString64("");
     dclay_user_data_t* user_data = (dclay_user_data_t*)command.userData;
-    dmhash_t           target_layer = user_data && user_data->layer ? user_data->layer : default_layer;
+    dmhash_t           layer = 0;
+    if (user_data)
+    {
+        layer = command.commandType == CLAY_RENDER_COMMAND_TYPE_BORDER ? user_data->border_layer : user_data->layer;
+    }
+    dmhash_t target_layer = layer ? layer : default_layer;
 
     if (entry->layer == target_layer)
     {
@@ -1762,9 +1797,9 @@ static void dclay_ApplyCommandLayer(dclay_surface_t* surface, dclay_gui_node_t* 
         return;
     }
 
-    if (user_data)
+    if (layer)
     {
-        dmLogError("Clay GUI layer '%s' is not specified in the scene", dmHashReverseSafe64(user_data->layer));
+        dmLogError("Clay GUI layer '%s' is not specified in the scene", dmHashReverseSafe64(layer));
     }
 
     // Do not leave a retained node on its previous explicit layer when a Lua
@@ -1916,6 +1951,57 @@ static void dclay_SetNodeRoundedRectConstants(dclay_surface_t* surface, dclay_gu
     entry->shape_uv_transform_y = transform_shape_uv ? *shape_uv_transform_y : dmVMath::Vector4(0.0f);
 }
 
+static void dclay_SetNodeBorderConstants(dclay_surface_t* surface, dclay_gui_node_t* entry, const Clay_Color& color, const Clay_BorderWidth& width)
+{
+    static const dmhash_t border_color_hash = dmHashString64("border_color");
+    static const dmhash_t border_width_hash = dmHashString64("border_width");
+
+    dmVMath::Vector4      border_color(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f);
+
+    // The fragment shader uses Defold's bottom-left-origin shape coordinate.
+    // Keep left and right in place, but rotate Clay's top/bottom widths here
+    // just as dclay_SetNodeRoundedRectConstants() rotates its corner radii.
+    dmVMath::Vector4 border_width((float)width.left, (float)width.right, (float)width.bottom, (float)width.top);
+    bool             bordered = width.left != 0 || width.right != 0 || width.top != 0 || width.bottom != 0;
+
+    if (entry->border_constants_set == bordered && dclay_Vector4Equal(entry->border_color, border_color) && dclay_Vector4Equal(entry->border_width, border_width))
+    {
+        return;
+    }
+
+    dmGameSystem::HComponentRenderConstants constants = (dmGameSystem::HComponentRenderConstants)dmGui::GetNodeRenderConstants(surface->gui_scene, entry->node);
+
+    if (!bordered)
+    {
+        if (constants)
+        {
+            dmGameSystem::ClearRenderConstant(constants, border_color_hash);
+            dmGameSystem::ClearRenderConstant(constants, border_width_hash);
+
+            if (dmGameSystem::GetRenderConstantCount(constants) == 0)
+            {
+                dmGui::SetNodeRenderConstants(surface->gui_scene, entry->node, 0);
+                dmGameSystem::DestroyRenderConstants(constants);
+            }
+        }
+    }
+    else
+    {
+        if (!constants)
+        {
+            constants = dmGameSystem::CreateRenderConstants();
+            dmGui::SetNodeRenderConstants(surface->gui_scene, entry->node, constants);
+        }
+
+        dmGameSystem::SetRenderConstant(constants, border_color_hash, &border_color, 1);
+        dmGameSystem::SetRenderConstant(constants, border_width_hash, &border_width, 1);
+    }
+
+    entry->border_color = border_color;
+    entry->border_width = border_width;
+    entry->border_constants_set = bordered;
+}
+
 static bool dclay_NewGuiNode(dclay_surface_t* surface, dclay_gui_node_type_t type, dmGui::HNode parent, dmGui::HNode* out_node)
 {
     dmGui::NodeType node_type = type == DCLAY_GUI_NODE_TEXT ? dmGui::NODE_TYPE_TEXT : dmGui::NODE_TYPE_BOX;
@@ -1941,9 +2027,9 @@ static bool dclay_NewGuiNode(dclay_surface_t* surface, dclay_gui_node_type_t typ
     return true;
 }
 
-static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_gui_node_type_t type, uint16_t role, dmGui::HNode parent)
+static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_gui_node_type_t type, dmGui::HNode parent)
 {
-    uint64_t          key = dclay_CommandKey(command, type, role);
+    uint64_t          key = dclay_CommandKey(command, type);
     dclay_gui_node_t* entry = surface->gui_nodes.Get(key);
 
     if (entry)
@@ -1984,6 +2070,8 @@ static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, cons
     new_entry.corner_radii = dmVMath::Vector4(0.0f);
     new_entry.shape_uv_transform_x = dmVMath::Vector4(0.0f);
     new_entry.shape_uv_transform_y = dmVMath::Vector4(0.0f);
+    new_entry.border_color = dmVMath::Vector4(0.0f);
+    new_entry.border_width = dmVMath::Vector4(0.0f);
 
     surface->gui_nodes.Put(key, new_entry);
     entry = surface->gui_nodes.Get(key);
@@ -2119,7 +2207,7 @@ static void dclay_OrderGuiNode(dclay_surface_t* surface, dmGui::HNode parent, dm
 
 static bool dclay_UpdateRectangleNode(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_scope_t& scope, const Clay_Color* overlays, uint32_t overlay_count)
 {
-    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_RECTANGLE, 0, scope.parent);
+    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_RECTANGLE, scope.parent);
     if (!entry)
     {
         return false;
@@ -2148,7 +2236,7 @@ static bool dclay_UpdateTextNode(dclay_surface_t* surface, const Clay_RenderComm
         return false;
     }
 
-    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_TEXT, 0, scope.parent);
+    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_TEXT, scope.parent);
     if (!entry)
     {
         return false;
@@ -2199,7 +2287,7 @@ static bool dclay_UpdateImageNode(dclay_surface_t* surface, const Clay_RenderCom
     }
 
     const dclay_image_t& image = surface->images[(uint32_t)encoded_index - 1];
-    dclay_gui_node_t*    entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_IMAGE, 0, scope.parent);
+    dclay_gui_node_t*    entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_IMAGE, scope.parent);
     if (!entry || !dclay_SetNodeImage(surface, entry, image.texture, image.animation))
     {
         return false;
@@ -2247,44 +2335,39 @@ static bool dclay_UpdateImageNode(dclay_surface_t* surface, const Clay_RenderCom
     return true;
 }
 
-static bool dclay_EmitBorderSide(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_scope_t& scope, const Clay_BoundingBox& box, uint16_t role, Clay_Color color)
+static bool dclay_UpdateBorderNode(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_scope_t& scope, const Clay_Color* overlays, uint32_t overlay_count)
 {
-    if (box.width <= 0.0f || box.height <= 0.0f)
+    const Clay_BorderRenderData& border = command.renderData.border;
+    if (border.width.left == 0 && border.width.right == 0 && border.width.top == 0 && border.width.bottom == 0)
     {
+        // Clay also emits this command when only betweenChildren is set. Those
+        // separators arrive as their own rectangle commands, so there is no
+        // outer border node to retain in that case.
         return false;
     }
 
-    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_BORDER, role, scope.parent);
+    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_BORDER, scope.parent);
     if (!entry)
     {
         return false;
     }
 
+    Clay_Color color = dclay_ApplyOverlays(border.color, overlays, overlay_count);
+
     dclay_SetNodeImage(surface, entry, 0, 0);
-    dmGui::SetNodeProperty(surface->gui_scene, entry->node, dmGui::PROPERTY_SLICE9, dmVMath::Vector4(0.0f));
-    dmGui::SetNodeProperty(surface->gui_scene, entry->node, dmGui::PROPERTY_COLOR, dmVMath::Vector4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f));
-    dclay_SetCommandTransform(surface, entry->node, box, 1.0f, dclay_GetScopeBox(scope));
+    // Defold prunes ordinary GUI nodes with zero calculated opacity before
+    // their material and render constants reach the renderer. Keep this
+    // shader-only border node opaque at the GUI level; the border shader
+    // writes a premultiplied transparent interior.
+    dmGui::SetNodeProperty(surface->gui_scene, entry->node, dmGui::PROPERTY_COLOR, dmVMath::Vector4(1.0f));
+    dclay_SetNodeRoundedRectConstants(surface, entry, border.cornerRadius);
+    dclay_SetNodeBorderConstants(surface, entry, color, border.width);
+    dclay_SetCommandTransform(surface, entry->node, command.boundingBox, 1.0f, dclay_GetScopeBox(scope));
     dclay_OrderGuiNode(surface, scope.parent, entry->node, scope.previous);
 
     scope.previous = entry->node;
 
     return true;
-}
-
-static void dclay_UpdateBorderNodes(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_scope_t& scope, const Clay_Color* overlays, uint32_t overlay_count)
-{
-    const Clay_BorderRenderData& border = command.renderData.border;
-    const Clay_BoundingBox&      box = command.boundingBox;
-    Clay_Color                   color = dclay_ApplyOverlays(border.color, overlays, overlay_count);
-    float                        left = (float)border.width.left;
-    float                        right = (float)border.width.right;
-    float                        top = (float)border.width.top;
-    float                        bottom = (float)border.width.bottom;
-
-    dclay_EmitBorderSide(surface, command, scope, { box.x, box.y, box.width, top }, 1, color);
-    dclay_EmitBorderSide(surface, command, scope, { box.x, box.y + box.height - bottom, box.width, bottom }, 2, color);
-    dclay_EmitBorderSide(surface, command, scope, { box.x, box.y + top, left, box.height - top - bottom }, 3, color);
-    dclay_EmitBorderSide(surface, command, scope, { box.x + box.width - right, box.y + top, right, box.height - top - bottom }, 4, color);
 }
 
 static bool dclay_PushClipScope(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_scope_t* scopes, uint32_t* scope_count)
@@ -2326,7 +2409,7 @@ static bool dclay_PushClipScope(dclay_surface_t* surface, const Clay_RenderComma
         box.height = layout.height;
     }
 
-    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_CLIP, 0, parent_scope.parent);
+    dclay_gui_node_t* entry = dclay_GetOrCreateGuiNode(surface, command, DCLAY_GUI_NODE_CLIP, parent_scope.parent);
     if (!entry)
     {
         return false;
@@ -2439,7 +2522,7 @@ static void dclay_ReconcileGui(dclay_surface_t* surface, Clay_RenderCommandArray
                 dclay_UpdateRectangleNode(surface, command, scope, overlays, overlay_count);
                 break;
             case CLAY_RENDER_COMMAND_TYPE_BORDER:
-                dclay_UpdateBorderNodes(surface, command, scope, overlays, overlay_count);
+                dclay_UpdateBorderNode(surface, command, scope, overlays, overlay_count);
                 break;
             case CLAY_RENDER_COMMAND_TYPE_TEXT:
                 dclay_UpdateTextNode(surface, command, scope, overlays, overlay_count);
