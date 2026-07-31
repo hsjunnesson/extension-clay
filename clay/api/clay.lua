@@ -333,7 +333,7 @@ function clay.initialize(root_node, max_element_count) end
 ---@param surface clay.Surface Clay surface.
 function clay.destroy(surface) end
 
----Lays out one declarative element tree and reconciles its render commands with retained GUI nodes. The root table may be constructed for this call or retained and mutated between calls. Parsing errors preserve the previous retained GUI tree and leave the surface ready for the next frame.
+---Lays out one declarative element tree and reconciles its render commands with retained GUI nodes. The root table may be constructed for this call or retained and mutated between calls. Element-specific parsing errors raised by the binding include the current declaration's explicit ID when available. Errors preserve the previous retained GUI tree and leave the surface ready for the next frame.
 ---@param surface clay.Surface Clay surface.
 ---@param root clay.Element Root element declaration.
 ---@param dt? number Frame delta time in seconds; defaults to zero.

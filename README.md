@@ -75,7 +75,7 @@ The generated [script API](clay/api/clay.script_api) and [Lua annotations](clay/
 
 `clay.layout(surface, root, dt)` synchronously accepts one declarative root tree, traverses it parents-first, and submits it to Clay. The root table can be newly constructed each frame or retained and mutated in Lua; the extension does not retain it after the call returns. The complete render-command array returned by Clay is then treated as authoritative, since Clay may also emit commands for features such as its debug overlay and transitions.
 
-The single atomic call also keeps Clay's open-element state inside the native binding. Declaration errors leave the previously reconciled GUI tree visible and the surface ready for the next call.
+The single atomic call also keeps Clay's open-element state inside the native binding. Declaration errors leave the previously reconciled GUI tree visible and the surface ready for the next call. Element-specific errors raised by the binding include the declaration's original string, hash, or Clay ID helper expression when available, making failures in large nested trees easier to locate.
 
 Generated GUI nodes are not recreated every frame. They are stored by stable command identity and updated in place. New commands allocate nodes, missing commands remove them, and unchanged commands reuse their existing nodes. Stable explicit element IDs are therefore recommended for interfaces that change structure or use transitions.
 

@@ -29,7 +29,7 @@
 
   - name: layout
     type: function
-    desc: "Lays out one declarative element tree and reconciles its render commands with retained GUI nodes. The root table may be constructed for this call or retained and mutated between calls. Parsing errors preserve the previous retained GUI tree and leave the surface ready for the next frame."
+    desc: "Lays out one declarative element tree and reconciles its render commands with retained GUI nodes. The root table may be constructed for this call or retained and mutated between calls. Element-specific parsing errors raised by the binding include the current declaration's explicit ID when available. Errors preserve the previous retained GUI tree and leave the surface ready for the next frame."
     parameters:
     - name: surface
       type: "clay.Surface"

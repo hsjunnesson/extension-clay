@@ -724,6 +724,51 @@ static bool dclay_HasMetatable(lua_State* L, int index, const char* name)
     return equal;
 }
 
+static int dclay_ElementError(lua_State* L, int element_index, const char* message)
+{
+    element_index = dclay_AbsIndex(L, element_index);
+    lua_getfield(L, element_index, "id");
+
+    if (lua_isstring(L, -1))
+    {
+        return luaL_error(L, "%s (element id = \"%s\")", message, lua_tostring(L, -1));
+    }
+
+    if (dmScript::IsHash(L, -1))
+    {
+        return luaL_error(L, "%s (element id hash = %s)", message, dmHashReverseSafe64(dmScript::CheckHash(L, -1)));
+    }
+
+    if (dclay_HasMetatable(L, -1, ID_META))
+    {
+        dclay_id_t* id = (dclay_id_t*)lua_touserdata(L, -1);
+        const char* helper = "id";
+        switch (id->type)
+        {
+            case DCLAY_ID_GLOBAL_INDEXED:
+                helper = "idi";
+                break;
+            case DCLAY_ID_LOCAL:
+                helper = "id_local";
+                break;
+            case DCLAY_ID_LOCAL_INDEXED:
+                helper = "idi_local";
+                break;
+            case DCLAY_ID_GLOBAL:
+                break;
+        }
+
+        if (id->type == DCLAY_ID_GLOBAL_INDEXED || id->type == DCLAY_ID_LOCAL_INDEXED)
+        {
+            return luaL_error(L, "%s (element id = clay.%s(\"%s\", %d))", message, helper, id->string.chars, (int)id->index);
+        }
+
+        return luaL_error(L, "%s (element id = clay.%s(\"%s\"))", message, helper, id->string.chars);
+    }
+
+    return luaL_error(L, "%s", message);
+}
+
 static float dclay_GetOptionalNumberField(lua_State* L, int table_index, const char* name, float default_value)
 {
     table_index = dclay_AbsIndex(L, table_index);
@@ -1042,7 +1087,7 @@ static void dclay_ParseBorderWidth(lua_State* L, int index, Clay_BorderWidth* wi
     width->betweenChildren = dclay_GetOptionalU16Field(L, index, "between_children", 0);
 }
 
-static void dclay_ParseTransition(lua_State* L, int index, Clay_TransitionElementConfig* transition)
+static void dclay_ParseTransition(lua_State* L, int index, int element_index, Clay_TransitionElementConfig* transition)
 {
     index = dclay_AbsIndex(L, index);
     luaL_checktype(L, index, LUA_TTABLE);
@@ -1050,13 +1095,13 @@ static void dclay_ParseTransition(lua_State* L, int index, Clay_TransitionElemen
     lua_getfield(L, index, "duration");
     if (lua_isnil(L, -1))
     {
-        luaL_error(L, "clay transition requires a duration field");
+        dclay_ElementError(L, element_index, "clay transition requires a duration field");
     }
 
     transition->duration = (float)luaL_checknumber(L, -1);
     if (transition->duration < 0.0f)
     {
-        luaL_error(L, "clay transition duration must be zero or greater");
+        dclay_ElementError(L, element_index, "clay transition duration must be zero or greater");
     }
     lua_pop(L, 1);
 
@@ -1068,13 +1113,13 @@ static void dclay_ParseTransition(lua_State* L, int index, Clay_TransitionElemen
     lua_getfield(L, index, "properties");
     if (lua_isnil(L, -1))
     {
-        luaL_error(L, "clay transition requires a properties bitmask");
+        dclay_ElementError(L, element_index, "clay transition requires a properties bitmask");
     }
 
     int32_t properties = (int32_t)luaL_checkinteger(L, -1);
     if (properties <= 0 || (properties & ~valid_properties) != 0)
     {
-        luaL_error(L, "clay transition properties contains an unsupported flag");
+        dclay_ElementError(L, element_index, "clay transition properties contains an unsupported flag");
     }
     transition->properties = (Clay_TransitionProperty)properties;
     lua_pop(L, 1);
@@ -1149,7 +1194,7 @@ static void dclay_ParseLayout(lua_State* L, int index, Clay_LayoutConfig* layout
     lua_pop(L, 1);
 }
 
-static void dclay_ParseFloating(lua_State* L, int index, Clay_FloatingElementConfig* floating)
+static void dclay_ParseFloating(lua_State* L, int index, int element_index, Clay_FloatingElementConfig* floating)
 {
     index = dclay_AbsIndex(L, index);
     luaL_checktype(L, index, LUA_TTABLE);
@@ -1196,7 +1241,7 @@ static void dclay_ParseFloating(lua_State* L, int index, Clay_FloatingElementCon
 
     if (floating->attachTo == CLAY_ATTACH_TO_ELEMENT_WITH_ID && floating->parentId == 0)
     {
-        luaL_error(L, "clay floating field 'parent_id' is required when attach_to is ATTACH_TO_ELEMENT_WITH_ID");
+        dclay_ElementError(L, element_index, "clay floating field 'parent_id' is required when attach_to is ATTACH_TO_ELEMENT_WITH_ID");
     }
 }
 
@@ -1237,7 +1282,7 @@ static bool dclay_ParseElement(lua_State* L, int index, Clay_ElementDeclaration*
     lua_getfield(L, index, "floating");
     if (!lua_isnil(L, -1))
     {
-        dclay_ParseFloating(L, -1, &declaration->floating);
+        dclay_ParseFloating(L, -1, index, &declaration->floating);
     }
     lua_pop(L, 1);
 
@@ -1253,7 +1298,7 @@ static bool dclay_ParseElement(lua_State* L, int index, Clay_ElementDeclaration*
             lua_getfield(L, image_index, "texture");
             if (lua_isnil(L, -1))
             {
-                luaL_error(L, "clay image table requires a texture field");
+                dclay_ElementError(L, index, "clay image table requires a texture field");
             }
             image.texture = dclay_CheckHashOrString(L, -1, "image.texture");
             lua_pop(L, 1);
@@ -1308,7 +1353,7 @@ static bool dclay_ParseElement(lua_State* L, int index, Clay_ElementDeclaration*
 
         if (use_scroll_offset && !declaration->clip.horizontal && !declaration->clip.vertical)
         {
-            luaL_error(L, "clay clip field 'scroll' requires horizontal and/or vertical clipping");
+            dclay_ElementError(L, index, "clay clip field 'scroll' requires horizontal and/or vertical clipping");
         }
     }
     lua_pop(L, 1);
@@ -1334,7 +1379,7 @@ static bool dclay_ParseElement(lua_State* L, int index, Clay_ElementDeclaration*
         lua_getfield(L, border_index, "width");
         if (lua_isnil(L, -1))
         {
-            luaL_error(L, "clay border requires a width field");
+            dclay_ElementError(L, index, "clay border requires a width field");
         }
         dclay_ParseBorderWidth(L, -1, &declaration->border.width);
         lua_pop(L, 1);
@@ -1344,7 +1389,7 @@ static bool dclay_ParseElement(lua_State* L, int index, Clay_ElementDeclaration*
     lua_getfield(L, index, "transition");
     if (!lua_isnil(L, -1))
     {
-        dclay_ParseTransition(L, -1, &declaration->transition);
+        dclay_ParseTransition(L, -1, index, &declaration->transition);
     }
     lua_pop(L, 1);
 
@@ -1410,7 +1455,7 @@ static void dclay_ValidateNodeIds(lua_State* L, int index)
     lua_getfield(L, index, "on_hover");
     if (!lua_isnil(L, -1) && !lua_isfunction(L, -1))
     {
-        luaL_error(L, "clay element field 'on_hover' must be a function");
+        dclay_ElementError(L, index, "clay element field 'on_hover' must be a function");
     }
     lua_pop(L, 1);
 
@@ -2762,7 +2807,7 @@ static int dclay_LayoutProtected(lua_State* L)
 
 /**
  * Lays out one declarative element tree and reconciles its render commands with retained GUI nodes.
- * The root table may be constructed for this call or retained and mutated between calls. Parsing errors preserve the previous retained GUI tree and leave the surface ready for the next frame.
+ * The root table may be constructed for this call or retained and mutated between calls. Element-specific parsing errors raised by the binding include the current declaration's explicit ID when available. Errors preserve the previous retained GUI tree and leave the surface ready for the next frame.
  * @name clay.layout(surface, root, dt)
  * @param surface [type: clay.Surface] Clay surface.
  * @param root [type: clay.Element] Root element declaration.
