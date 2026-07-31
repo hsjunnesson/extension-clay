@@ -534,7 +534,7 @@ static bool             g_PixelPerfect = 0;
  * @field layer [type: string|hash|nil] Explicit GUI layer for this element's commands; layers are not inherited.
  * @field slice9 [type: vector4|nil] Defold slice-9 values ordered left, top, right, bottom.
  * @field on_hover [type: fun(element: clay.Element, pointer?: clay.PointerData)|nil] Callback invoked while this native element is open.
- * @field children [type: table<integer, clay.Child>|nil] Child elements and text declarations.
+ * @field children [type: table<integer, clay.Child>|nil] Child elements and text declarations; nil entries are ignored.
  * @field [string] [type: any] Application data.
  */
 
@@ -1436,7 +1436,10 @@ static void dclay_ValidateNodeIds(lua_State* L, int index)
         for (uint32_t i = 1; i <= count; ++i)
         {
             lua_rawgeti(L, children, i);
-            dclay_ValidateNodeIds(L, -1);
+            if (!lua_isnil(L, -1))
+            {
+                dclay_ValidateNodeIds(L, -1);
+            }
             lua_pop(L, 1);
         }
     }
@@ -1681,7 +1684,10 @@ static void dclay_EmitNode(lua_State* L, int index, uint32_t* element_count)
         for (uint32_t i = 1; i <= count; ++i)
         {
             lua_rawgeti(L, children, i);
-            dclay_EmitNode(L, -1, element_count);
+            if (!lua_isnil(L, -1))
+            {
+                dclay_EmitNode(L, -1, element_count);
+            }
             lua_pop(L, 1);
         }
     }

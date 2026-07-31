@@ -298,7 +298,7 @@ clay = {}
 ---@field layer? string|hash Explicit GUI layer for this element's commands; layers are not inherited.
 ---@field slice9? vector4 Defold slice-9 values ordered left, top, right, bottom.
 ---@field on_hover? fun(element: clay.Element, pointer?: clay.PointerData) Callback invoked while this native element is open.
----@field children? table<integer, clay.Child> Child elements and text declarations.
+---@field children? table<integer, clay.Child> Child elements and text declarations; nil entries are ignored.
 ---@field [string] any Application data.
 
 ---Text layout and Defold rendering configuration.
