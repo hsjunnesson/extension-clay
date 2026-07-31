@@ -224,7 +224,6 @@ struct dclay_surface_t
     dmGui::HNode  root_node;
     PAD(4);
     Clay_Vector2                    root_screen_scale;
-    dmArray<int>                    root_refs;
     dmArray<dclay_font_t>           fonts;
     dmArray<dclay_image_t>          images;
     dmArray<dclay_user_data_t>      user_data;
@@ -598,7 +597,6 @@ static uint64_t dclay_HashTableReservedBytes(const dmHashTable64<T>& table)
 static uint32_t dclay_CalculateReservedMemory(const dclay_surface_t* surface)
 {
     return surface->clay_memory_size +
-    dclay_ArrayReservedBytes(surface->root_refs) +
     dclay_ArrayReservedBytes(surface->fonts) +
     dclay_ArrayReservedBytes(surface->images) +
     dclay_ArrayReservedBytes(surface->user_data) +
@@ -710,16 +708,6 @@ static Clay_Dimensions dclay_GetRootDimensions(dclay_surface_t* surface, Clay_Ve
     }
 
     return { size.getX() * screen_scale.x, size.getY() * screen_scale.y };
-}
-
-static void dclay_ClearRoots(lua_State* L, dclay_surface_t* surface)
-{
-    for (uint32_t i = 0; i < surface->root_refs.Size(); ++i)
-    {
-        luaL_unref(L, LUA_REGISTRYINDEX, surface->root_refs[i]);
-    }
-
-    surface->root_refs.SetSize(0);
 }
 
 static bool dclay_HasMetatable(lua_State* L, int index, const char* name)
@@ -2588,14 +2576,12 @@ static void dclay_ReconcileGui(dclay_surface_t* surface, Clay_RenderCommandArray
     dclay_DeleteGuiNodes(surface, true);
 }
 
-static void dclay_FreeSurface(lua_State* L, dclay_surface_t* surface, bool delete_nodes)
+static void dclay_FreeSurface(dclay_surface_t* surface, bool delete_nodes)
 {
     if (!surface || !surface->valid)
     {
         return;
     }
-
-    dclay_ClearRoots(L, surface);
 
     if (delete_nodes)
     {
@@ -2729,24 +2715,17 @@ static int dclay_Initialize(lua_State* L)
     return 1;
 }
 
-/**
- * Begins a layout and synchronizes its dimensions from the root GUI node.
- * @name clay.begin_layout(surface)
- * @param surface [type: clay.Surface] Clay surface.
- */
-static int dclay_BeginLayout(lua_State* L)
+static int dclay_LayoutProtected(lua_State* L)
 {
-    DM_PROFILE("ClayBeginLayout");
-
-    DM_LUA_STACK_CHECK(L, 0);
-
     dclay_surface_t* surface = dclay_CheckSurface(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    float dt = lua_isnoneornil(L, 3) ? 0.0f : (float)luaL_checknumber(L, 3);
+
     dclay_SelectSurface(surface);
 
-    // A Lua error can unwind gameplay code between begin_layout() and
-    // end_layout(). Clay_BeginLayout() resets its ephemeral per-frame state, so
-    // treat the next begin as the recovery boundary for an abandoned layout.
-    dclay_ClearRoots(L, surface);
+#if defined(DM_DEBUG)
+    dclay_ValidateNodeIds(L, 2);
+#endif
 
     surface->user_data.SetSize(0);
 
@@ -2757,80 +2736,11 @@ static int dclay_BeginLayout(lua_State* L)
     Clay_SetLayoutDimensions(dclay_GetRootDimensions(surface, &surface->root_screen_scale));
 
     Clay_BeginLayout();
-
     surface->layout_open = true;
 
-    return 0;
-}
-
-/**
- * Retains a root element declaration for the current layout.
- * @name clay.element(element)
- * @param element [type: clay.Element] Declarative element tree.
- */
-static int dclay_Element(lua_State* L)
-{
-    DM_LUA_STACK_CHECK(L, 0);
-
-    dclay_surface_t* surface = g_ActiveSurface;
-    if (!surface || !surface->layout_open)
-    {
-        return DM_LUA_ERROR("clay.element() must be called between clay.begin_layout() and clay.end_layout()");
-    }
-
-    luaL_checktype(L, 1, LUA_TTABLE);
-
-    if (surface->root_refs.Full())
-    {
-        surface->root_refs.OffsetCapacity(8);
-    }
-
-    lua_pushvalue(L, 1);
-
-    surface->root_refs.Push(luaL_ref(L, LUA_REGISTRYINDEX));
-
-    return 0;
-}
-
-/**
- * Completes the layout and reconciles Clay render commands with retained GUI nodes.
- * @name clay.end_layout(surface, dt)
- * @param surface [type: clay.Surface] Clay surface.
- * @param dt [type: number|nil] Frame delta time in seconds; defaults to zero.
- */
-static int dclay_EndLayout(lua_State* L)
-{
-    DM_PROFILE("ClayEndLayout");
-
-    DM_LUA_STACK_CHECK(L, 0);
-
-    dclay_surface_t* surface = dclay_CheckSurface(L, 1);
-    if (surface != g_ActiveSurface || !surface->layout_open)
-    {
-        return DM_LUA_ERROR("Clay layout not open for this surface");
-    }
-
-    dclay_SelectSurface(surface);
-
-#if defined(DM_DEBUG)
-    for (uint32_t i = 0; i < surface->root_refs.Size(); ++i)
-    {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, surface->root_refs[i]);
-        dclay_ValidateNodeIds(L, -1);
-        lua_pop(L, 1);
-    }
-#endif
-
     uint32_t element_count = 0;
+    dclay_EmitNode(L, 2, &element_count);
 
-    for (uint32_t i = 0; i < surface->root_refs.Size(); ++i)
-    {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, surface->root_refs[i]);
-        dclay_EmitNode(L, -1, &element_count);
-        lua_pop(L, 1);
-    }
-
-    float                   dt = lua_gettop(L) > 1 ? (float)luaL_checknumber(L, 2) : 0.0f;
     Clay_RenderCommandArray commands = Clay_EndLayout(dt);
 
     surface->layout_open = false;
@@ -2847,9 +2757,51 @@ static int dclay_EndLayout(lua_State* L)
     dclay_UpdateMemoryProfile(surface);
 #endif
 
-    dclay_ClearRoots(L, surface);
-
     return 0;
+}
+
+/**
+ * Lays out one declarative element tree and reconciles its render commands with retained GUI nodes.
+ * The root table may be constructed for this call or retained and mutated between calls. Parsing errors preserve the previous retained GUI tree and leave the surface ready for the next frame.
+ * @name clay.layout(surface, root, dt)
+ * @param surface [type: clay.Surface] Clay surface.
+ * @param root [type: clay.Element] Root element declaration.
+ * @param dt [type: number|nil] Frame delta time in seconds; defaults to zero.
+ */
+static int dclay_Layout(lua_State* L)
+{
+    dclay_surface_t* surface = dclay_CheckSurface(L, 1);
+    if (g_ActiveSurface && g_ActiveSurface->layout_open)
+    {
+        return luaL_error(L, "clay.layout() cannot be called recursively");
+    }
+
+    int result = 0;
+    {
+        DM_PROFILE("ClayLayout");
+
+        int argument_count = lua_gettop(L);
+
+        // Validation and traversal call luaL_error() for malformed declarations.
+        // Run the complete operation behind a protected Lua boundary so those
+        // longjmps return here, where the surface can be made usable again before
+        // the original error is propagated to gameplay code.
+        lua_pushcfunction(L, dclay_LayoutProtected);
+        for (int i = 1; i <= argument_count; ++i)
+        {
+            lua_pushvalue(L, i);
+        }
+
+        result = lua_pcall(L, argument_count, 0, 0);
+
+        if (result != 0 && surface->valid)
+        {
+            dclay_SelectSurface(surface);
+            surface->layout_open = false;
+        }
+    }
+
+    return result == 0 ? 0 : lua_error(L);
 }
 
 static int dclay_NewId(lua_State* L, dclay_id_type_t type)
@@ -3070,7 +3022,7 @@ static Clay_Vector2 dclay_ScreenToLayoutPosition(dclay_surface_t* surface, float
 }
 
 /**
- * Updates pointer hit testing for the previous completed layout. Call before begin_layout().
+ * Updates pointer hit testing for the previous completed layout. Call before layout().
  * @name clay.set_pointer_state(surface, x, y, pressed)
  * @param surface [type: clay.Surface] Clay surface.
  * @param x [type: number] Defold screen X coordinate, normally action.screen_x.
@@ -3086,7 +3038,7 @@ static int dclay_SetPointerState(lua_State* L)
     dclay_surface_t* surface = dclay_CheckSurface(L, 1);
     if (surface->layout_open)
     {
-        return DM_LUA_ERROR("clay.set_pointer_state() must be called before clay.begin_layout()");
+        return DM_LUA_ERROR("clay.set_pointer_state() cannot be called from inside clay.layout()");
     }
 
     float screen_x = (float)luaL_checknumber(L, 2);
@@ -3104,7 +3056,7 @@ static int dclay_SetPointerState(lua_State* L)
 }
 
 /**
- * Updates Clay scroll containers from the previous layout. Call before begin_layout().
+ * Updates Clay scroll containers from the previous layout. Call before layout().
  * @name clay.update_scroll_containers(surface, enable_drag_scrolling, scroll_x, scroll_y, dt)
  * @param surface [type: clay.Surface] Clay surface.
  * @param enable_drag_scrolling [type: boolean] Enable pointer-drag scrolling.
@@ -3121,7 +3073,7 @@ static int dclay_UpdateScrollContainers(lua_State* L)
     dclay_surface_t* surface = dclay_CheckSurface(L, 1);
     if (surface->layout_open)
     {
-        return DM_LUA_ERROR("clay.update_scroll_containers() must be called before clay.begin_layout()");
+        return DM_LUA_ERROR("clay.update_scroll_containers() cannot be called from inside clay.layout()");
     }
 
     luaL_checktype(L, 2, LUA_TBOOLEAN);
@@ -3314,7 +3266,7 @@ static int dclay_SetDebugModeEnabled(lua_State* L)
     dclay_surface_t* surface = dclay_CheckSurface(L, 1);
     if (surface->layout_open)
     {
-        return DM_LUA_ERROR("clay.set_debug_mode_enabled() must be called before clay.begin_layout()");
+        return DM_LUA_ERROR("clay.set_debug_mode_enabled() cannot be called from inside clay.layout()");
     }
 
     dclay_SelectSurface(surface);
@@ -3363,7 +3315,7 @@ static int dclay_Destroy(lua_State* L)
 
     if (userdata && *userdata)
     {
-        dclay_FreeSurface(L, *userdata, true);
+        dclay_FreeSurface(*userdata, true);
         delete *userdata;
         *userdata = 0;
     }
@@ -3379,7 +3331,7 @@ static int dclay_SurfaceGc(lua_State* L)
         // The GUI scene may already have been destroyed when Lua collects this
         // userdata, so only release Clay-owned memory here. GUI scripts should
         // call clay.destroy(surface) from final().
-        dclay_FreeSurface(L, *userdata, false);
+        dclay_FreeSurface(*userdata, false);
         delete *userdata;
         *userdata = 0;
     }
@@ -3390,9 +3342,7 @@ static int dclay_SurfaceGc(lua_State* L)
 static const luaL_reg Module_methods[] = {
     { "initialize", dclay_Initialize },
     { "destroy", dclay_Destroy },
-    { "begin_layout", dclay_BeginLayout },
-    { "element", dclay_Element },
-    { "end_layout", dclay_EndLayout },
+    { "layout", dclay_Layout },
     { "text", dclay_Text },
     { "id", dclay_Id },
     { "idi", dclay_Idi },

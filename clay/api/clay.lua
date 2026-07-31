@@ -333,18 +333,11 @@ function clay.initialize(root_node, max_element_count) end
 ---@param surface clay.Surface Clay surface.
 function clay.destroy(surface) end
 
----Begins a layout and synchronizes its dimensions from the root GUI node.
+---Lays out one declarative element tree and reconciles its render commands with retained GUI nodes. The root table may be constructed for this call or retained and mutated between calls. Parsing errors preserve the previous retained GUI tree and leave the surface ready for the next frame.
 ---@param surface clay.Surface Clay surface.
-function clay.begin_layout(surface) end
-
----Retains a root element declaration for the current layout.
----@param element clay.Element Declarative element tree.
-function clay.element(element) end
-
----Completes the layout and reconciles Clay render commands with retained GUI nodes.
----@param surface clay.Surface Clay surface.
+---@param root clay.Element Root element declaration.
 ---@param dt? number Frame delta time in seconds; defaults to zero.
-function clay.end_layout(surface, dt) end
+function clay.layout(surface, root, dt) end
 
 ---Creates a text declaration for an element's children array.
 ---@param text string Text content.
@@ -396,7 +389,7 @@ function clay.sizing_fit(min, max) end
 ---@return clay.SizingAxis sizing Sizing descriptor.
 function clay.sizing_percent(percent) end
 
----Updates pointer hit testing for the previous completed layout. Call before begin_layout().
+---Updates pointer hit testing for the previous completed layout. Call before layout().
 ---@param surface clay.Surface Clay surface.
 ---@param x number Defold screen X coordinate, normally action.screen_x.
 ---@param y number Defold screen Y coordinate, normally action.screen_y.
@@ -425,7 +418,7 @@ function clay.pointer_over(surface, id) end
 ---@return table<integer, integer> ids Numeric element IDs in hit-test traversal order.
 function clay.get_pointer_over_ids(surface) end
 
----Updates Clay scroll containers from the previous layout. Call before begin_layout().
+---Updates Clay scroll containers from the previous layout. Call before layout().
 ---@param surface clay.Surface Clay surface.
 ---@param enable_drag_scrolling boolean Enable pointer-drag scrolling.
 ---@param scroll_x number Horizontal scroll delta.

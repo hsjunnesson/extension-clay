@@ -232,16 +232,14 @@ end
 function update(self, dt)
 	if self.surface then
 		-- Interaction uses the previous completed layout and must run before
-		-- begin_layout resets Clay's per-frame element tree.
+		-- layout resets Clay's per-frame element tree.
 		clay.set_pointer_state(self.surface, self.pointer_state[1], self.pointer_state[2], self.mouse_button_down)
 		clay.update_scroll_containers(self.surface, true, self.scroll_state[1], self.scroll_state[2], dt)
 		self.scroll_state[1] = 0
 		self.scroll_state[2] = 0
 
-		clay.begin_layout(self.surface)
-
-		clay.element {
-			id = "outer",
+		local root = {
+			id = "root",
 			layout = {
 				sizing = {
 					width = clay.sizing_grow(),
@@ -420,8 +418,8 @@ function update(self, dt)
 					},
 				},
 			},
-		}
-		
-		clay.end_layout(self.surface, dt)
+		} --[[@as clay.Element]]
+
+		clay.layout(self.surface, root, dt)
 	end
 end

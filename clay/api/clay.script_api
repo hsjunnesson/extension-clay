@@ -27,29 +27,16 @@
       type: "clay.Surface"
       desc: "Clay surface."
 
-  - name: begin_layout
+  - name: layout
     type: function
-    desc: "Begins a layout and synchronizes its dimensions from the root GUI node."
+    desc: "Lays out one declarative element tree and reconciles its render commands with retained GUI nodes. The root table may be constructed for this call or retained and mutated between calls. Parsing errors preserve the previous retained GUI tree and leave the surface ready for the next frame."
     parameters:
     - name: surface
       type: "clay.Surface"
       desc: "Clay surface."
-
-  - name: element
-    type: function
-    desc: "Retains a root element declaration for the current layout."
-    parameters:
-    - name: element
+    - name: root
       type: "clay.Element"
-      desc: "Declarative element tree."
-
-  - name: end_layout
-    type: function
-    desc: "Completes the layout and reconciles Clay render commands with retained GUI nodes."
-    parameters:
-    - name: surface
-      type: "clay.Surface"
-      desc: "Clay surface."
+      desc: "Root element declaration."
     - name: dt
       type: "number"
       desc: "Frame delta time in seconds; defaults to zero."
@@ -184,7 +171,7 @@
 
   - name: set_pointer_state
     type: function
-    desc: "Updates pointer hit testing for the previous completed layout. Call before begin_layout()."
+    desc: "Updates pointer hit testing for the previous completed layout. Call before layout()."
     parameters:
     - name: surface
       type: "clay.Surface"
@@ -255,7 +242,7 @@
 
   - name: update_scroll_containers
     type: function
-    desc: "Updates Clay scroll containers from the previous layout. Call before begin_layout()."
+    desc: "Updates Clay scroll containers from the previous layout. Call before layout()."
     parameters:
     - name: surface
       type: "clay.Surface"

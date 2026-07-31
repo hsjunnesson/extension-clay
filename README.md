@@ -30,9 +30,7 @@ function init(self)
 end
 
 function update(self, dt)
-    clay.begin_layout(self.surface)
-
-    clay.element {
+    clay.layout(self.surface, {
         id = "panel",
         layout = {
             sizing = {
@@ -54,9 +52,7 @@ function update(self, dt)
                 layer = hash("text"),
             }),
         },
-    }
-
-    clay.end_layout(self.surface, dt)
+    }, dt)
 end
 
 function final(self)
@@ -64,7 +60,7 @@ function final(self)
 end
 ```
 
-Pointer and scroll updates operate on the previous completed layout and must happen before `clay.begin_layout()`:
+Pointer and scroll updates operate on the previous completed layout and must happen before `clay.layout()`:
 
 ```lua
 clay.set_pointer_state(surface, action.screen_x, action.screen_y, pointer_down)
@@ -77,7 +73,9 @@ The generated [script API](clay/api/clay.script_api) and [Lua annotations](clay/
 
 ### Immediate layout, retained rendering
 
-Lua declarations form an intermediate tree between `clay.begin_layout()` and `clay.end_layout()`. At the end of the layout, the extension traverses that tree parents-first and submits it to Clay. The complete render-command array returned by Clay is then treated as authoritative; Clay may also emit commands for features such as its debug overlay and transitions.
+`clay.layout(surface, root, dt)` synchronously accepts one declarative root tree, traverses it parents-first, and submits it to Clay. The root table can be newly constructed each frame or retained and mutated in Lua; the extension does not retain it after the call returns. The complete render-command array returned by Clay is then treated as authoritative, since Clay may also emit commands for features such as its debug overlay and transitions.
+
+The single atomic call also keeps Clay's open-element state inside the native binding. Declaration errors leave the previously reconciled GUI tree visible and the surface ready for the next call.
 
 Generated GUI nodes are not recreated every frame. They are stored by stable command identity and updated in place. New commands allocate nodes, missing commands remove them, and unchanged commands reuse their existing nodes. Stable explicit element IDs are therefore recommended for interfaces that change structure or use transitions.
 
