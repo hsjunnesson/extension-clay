@@ -81,7 +81,7 @@ Generated GUI nodes are not recreated every frame. They are stored by stable com
 
 ### Defold resources stay native
 
-Text refers to fonts already registered on the GUI scene. The same Defold font resource is used for measurement and rendering, and an omitted `font_size` uses the size authored in the font component. Images similarly refer to GUI textures or to a texture-plus-animation pair for atlas regions.
+Text refers to fonts already registered on the GUI scene. The same Defold font resource is used for measurement and rendering, and an omitted `font_size` uses the size authored in the font component. `letter_spacing` is mapped to Defold text tracking. Clay performs wrapping and horizontal alignment itself with `wrap_mode` and `text_alignment`, then emits one command per line using `line_height`; the generated Defold text nodes therefore keep their own line breaking disabled. Images similarly refer to GUI textures or to a texture-plus-animation pair for atlas regions.
 
 Clay scissor commands become Defold stencil clipping nodes. Because Defold clipping is hierarchy-based, commands inside a clip scope are parented beneath the generated clipping node. Clay supports one-axis clipping; the backend expands the other axis because Defold stencil clipping always clips both.
 

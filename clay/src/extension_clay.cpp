@@ -264,6 +264,12 @@ static bool             g_PixelPerfect = 0;
  * @constant ATTACH_TO_ROOT [type: integer] Attach a floating element to the layout root.
  * @constant CLIP_TO_NONE [type: integer] Do not inherit the attached element's clipping.
  * @constant CLIP_TO_ATTACHED_PARENT [type: integer] Inherit the attached element's clipping.
+ * @constant TEXT_WRAP_WORDS [type: integer] Wrap text at whitespace.
+ * @constant TEXT_WRAP_NEWLINES [type: integer] Wrap text only at explicit newlines.
+ * @constant TEXT_WRAP_NONE [type: integer] Disable text wrapping.
+ * @constant TEXT_ALIGN_LEFT [type: integer] Align wrapped lines to the left.
+ * @constant TEXT_ALIGN_CENTER [type: integer] Center wrapped lines.
+ * @constant TEXT_ALIGN_RIGHT [type: integer] Align wrapped lines to the right.
  * @constant TRANSITION_PROPERTY_NONE [type: integer] No transition properties.
  * @constant TRANSITION_PROPERTY_X [type: integer] Transition horizontal position.
  * @constant TRANSITION_PROPERTY_Y [type: integer] Transition vertical position.
@@ -352,6 +358,20 @@ static bool             g_PixelPerfect = 0;
  * @alias clay.ClipTo [type: integer] Floating clipping behavior.
  * @value clay.CLIP_TO_NONE
  * @value clay.CLIP_TO_ATTACHED_PARENT
+ */
+
+/**
+ * @alias clay.TextWrapMode [type: integer] Text wrapping behavior.
+ * @value clay.TEXT_WRAP_WORDS
+ * @value clay.TEXT_WRAP_NEWLINES
+ * @value clay.TEXT_WRAP_NONE
+ */
+
+/**
+ * @alias clay.TextAlignment [type: integer] Horizontal alignment of wrapped text lines.
+ * @value clay.TEXT_ALIGN_LEFT
+ * @value clay.TEXT_ALIGN_CENTER
+ * @value clay.TEXT_ALIGN_RIGHT
  */
 
 /**
@@ -543,8 +563,10 @@ static bool             g_PixelPerfect = 0;
  * @field font_id [type: string|hash] Required GUI font name.
  * @field font_size [type: integer|nil] Defaults to the size authored in the Defold font resource.
  * @field text_color [type: clay.Color|nil] Text color; defaults to white.
- * @field letter_spacing [type: integer|nil] Additional letter spacing.
- * @field line_height [type: integer|nil] Explicit line height.
+ * @field letter_spacing [type: integer|nil] Additional spacing in pixels between characters; defaults to 0.
+ * @field line_height [type: integer|nil] Explicit line height in pixels; 0 or nil uses the font's natural line height.
+ * @field wrap_mode [type: clay.TextWrapMode|nil] Wrapping behavior; defaults to clay.TEXT_WRAP_WORDS.
+ * @field text_alignment [type: clay.TextAlignment|nil] Horizontal alignment of wrapped lines; defaults to clay.TEXT_ALIGN_LEFT.
  * @field layer [type: string|hash|nil] Explicit GUI layer; layers are not inherited.
  */
 
@@ -1562,10 +1584,11 @@ static void dclay_EmitText(lua_State* L, int index)
     if (!lua_isnil(L, -1))
     {
         luaL_checktype(L, -1, LUA_TTABLE);
+        int config_index = dclay_AbsIndex(L, -1);
 
-        config.userData = dclay_StoreUserData(L, dclay_ParseUserData(L, -1));
+        config.userData = dclay_StoreUserData(L, dclay_ParseUserData(L, config_index));
 
-        lua_getfield(L, -1, "font_id");
+        lua_getfield(L, config_index, "font_id");
         if (lua_isnil(L, -1))
         {
             luaL_error(L, "clay.text() requires a GUI font_id");
@@ -1573,7 +1596,7 @@ static void dclay_EmitText(lua_State* L, int index)
         config.fontId = dclay_GetOrCreateFont(L, g_ActiveSurface, dclay_CheckHashOrString(L, -1, "font_id"));
         lua_pop(L, 1);
 
-        lua_getfield(L, -1, "font_size");
+        lua_getfield(L, config_index, "font_size");
         if (lua_isnil(L, -1))
         {
             config.fontSize = (uint16_t)g_ActiveSurface->fonts[config.fontId].base_size;
@@ -1588,10 +1611,12 @@ static void dclay_EmitText(lua_State* L, int index)
         }
         lua_pop(L, 1);
 
-        config.letterSpacing = (uint16_t)dclay_GetOptionalNumberField(L, -1, "letter_spacing", 0);
-        config.lineHeight = (uint16_t)dclay_GetOptionalNumberField(L, -1, "line_height", 0);
+        config.letterSpacing = dclay_GetOptionalU16Field(L, config_index, "letter_spacing", 0);
+        config.lineHeight = dclay_GetOptionalU16Field(L, config_index, "line_height", 0);
+        config.wrapMode = (Clay_TextElementConfigWrapMode)dclay_GetOptionalIntegerField(L, config_index, "wrap_mode", CLAY_TEXT_WRAP_WORDS, CLAY_TEXT_WRAP_WORDS, CLAY_TEXT_WRAP_NONE);
+        config.textAlignment = (Clay_TextAlignment)dclay_GetOptionalIntegerField(L, config_index, "text_alignment", CLAY_TEXT_ALIGN_LEFT, CLAY_TEXT_ALIGN_LEFT, CLAY_TEXT_ALIGN_RIGHT);
 
-        lua_getfield(L, -1, "text_color");
+        lua_getfield(L, config_index, "text_color");
         if (!lua_isnil(L, -1))
         {
             dclay_ParseColor(L, -1, &config.textColor);
@@ -1762,8 +1787,17 @@ static Clay_Dimensions dclay_MeasureText(Clay_StringSlice text, Clay_TextElement
 
     if (dmGui::GetTextMetrics(surface->gui_scene, surface->text_scratch.Begin(), font.alias, FLT_MAX, false, 1.0f, tracking, &metrics) == dmGui::RESULT_OK)
     {
-        dimensions.width = metrics.m_Width * scale;
-        dimensions.height = (config->lineHeight > 0 ? (float)config->lineHeight : metrics.m_Height * scale);
+        // Clay expects every measured slice to include trailing letter spacing.
+        // Its word cache measures words and spaces separately, then removes the
+        // final spacing when it assembles a complete line. Defold deliberately
+        // excludes tracking after the final glyph from its text metrics, so add
+        // that one spacing here to keep Clay's bounds equal to the rendered GUI
+        // text. Empty slices must remain zero-sized.
+        dimensions.width = metrics.m_Width * scale + (length > 0 ? (float)config->letterSpacing : 0.0f);
+        // Clay applies lineHeight while sizing and positioning its wrapped
+        // lines. The measurement callback must return the font's natural
+        // height so Clay can vertically center the glyphs within that line.
+        dimensions.height = metrics.m_Height * scale;
     }
 
     return dimensions;
@@ -3505,6 +3539,24 @@ static void init_lua(lua_State* L)
 
     lua_pushnumber(L, CLAY_CLIP_TO_ATTACHED_PARENT);
     lua_setfield(L, -2, "CLIP_TO_ATTACHED_PARENT");
+
+    lua_pushnumber(L, CLAY_TEXT_WRAP_WORDS);
+    lua_setfield(L, -2, "TEXT_WRAP_WORDS");
+
+    lua_pushnumber(L, CLAY_TEXT_WRAP_NEWLINES);
+    lua_setfield(L, -2, "TEXT_WRAP_NEWLINES");
+
+    lua_pushnumber(L, CLAY_TEXT_WRAP_NONE);
+    lua_setfield(L, -2, "TEXT_WRAP_NONE");
+
+    lua_pushnumber(L, CLAY_TEXT_ALIGN_LEFT);
+    lua_setfield(L, -2, "TEXT_ALIGN_LEFT");
+
+    lua_pushnumber(L, CLAY_TEXT_ALIGN_CENTER);
+    lua_setfield(L, -2, "TEXT_ALIGN_CENTER");
+
+    lua_pushnumber(L, CLAY_TEXT_ALIGN_RIGHT);
+    lua_setfield(L, -2, "TEXT_ALIGN_RIGHT");
 
     lua_pushnumber(L, CLAY_TRANSITION_PROPERTY_NONE);
     lua_setfield(L, -2, "TRANSITION_PROPERTY_NONE");

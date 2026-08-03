@@ -414,6 +414,8 @@ function update(self, dt)
 							font_size = 36,
 							layer = self.h.text,
 							text_color = vmath.vector3(0.1, 0.1, 0.1),
+							text_alignment = clay.TEXT_ALIGN_CENTER,
+							letter_spacing = 4,
 						}),
 					},
 				},

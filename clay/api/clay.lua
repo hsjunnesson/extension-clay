@@ -59,6 +59,18 @@
 ---@field CLIP_TO_NONE integer
 ---Inherit the attached element's clipping.
 ---@field CLIP_TO_ATTACHED_PARENT integer
+---Wrap text at whitespace.
+---@field TEXT_WRAP_WORDS integer
+---Wrap text only at explicit newlines.
+---@field TEXT_WRAP_NEWLINES integer
+---Disable text wrapping.
+---@field TEXT_WRAP_NONE integer
+---Align wrapped lines to the left.
+---@field TEXT_ALIGN_LEFT integer
+---Center wrapped lines.
+---@field TEXT_ALIGN_CENTER integer
+---Align wrapped lines to the right.
+---@field TEXT_ALIGN_RIGHT integer
 ---No transition properties.
 ---@field TRANSITION_PROPERTY_NONE integer
 ---Transition horizontal position.
@@ -156,6 +168,18 @@ clay = {}
 ---@alias clay.ClipTo integer
 ---| `clay.CLIP_TO_NONE`
 ---| `clay.CLIP_TO_ATTACHED_PARENT`
+
+---Text wrapping behavior.
+---@alias clay.TextWrapMode integer
+---| `clay.TEXT_WRAP_WORDS`
+---| `clay.TEXT_WRAP_NEWLINES`
+---| `clay.TEXT_WRAP_NONE`
+
+---Horizontal alignment of wrapped text lines.
+---@alias clay.TextAlignment integer
+---| `clay.TEXT_ALIGN_LEFT`
+---| `clay.TEXT_ALIGN_CENTER`
+---| `clay.TEXT_ALIGN_RIGHT`
 
 ---Nonzero transition property bitmask; add flags to combine them.
 ---@alias clay.TransitionProperty integer
@@ -306,8 +330,10 @@ clay = {}
 ---@field font_id string|hash Required GUI font name.
 ---@field font_size? integer Defaults to the size authored in the Defold font resource.
 ---@field text_color? clay.Color Text color; defaults to white.
----@field letter_spacing? integer Additional letter spacing.
----@field line_height? integer Explicit line height.
+---@field letter_spacing? integer Additional spacing in pixels between characters; defaults to 0.
+---@field line_height? integer Explicit line height in pixels; 0 or nil uses the font's natural line height.
+---@field wrap_mode? clay.TextWrapMode Wrapping behavior; defaults to clay.TEXT_WRAP_WORDS.
+---@field text_alignment? clay.TextAlignment Horizontal alignment of wrapped lines; defaults to clay.TEXT_ALIGN_LEFT.
 ---@field layer? string|hash Explicit GUI layer; layers are not inherited.
 
 ---Mutable text declaration returned by clay.text().

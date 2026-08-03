@@ -430,6 +430,30 @@
     type: constant
     desc: "Inherit the attached element's clipping."
 
+  - name: TEXT_WRAP_WORDS
+    type: constant
+    desc: "Wrap text at whitespace."
+
+  - name: TEXT_WRAP_NEWLINES
+    type: constant
+    desc: "Wrap text only at explicit newlines."
+
+  - name: TEXT_WRAP_NONE
+    type: constant
+    desc: "Disable text wrapping."
+
+  - name: TEXT_ALIGN_LEFT
+    type: constant
+    desc: "Align wrapped lines to the left."
+
+  - name: TEXT_ALIGN_CENTER
+    type: constant
+    desc: "Center wrapped lines."
+
+  - name: TEXT_ALIGN_RIGHT
+    type: constant
+    desc: "Align wrapped lines to the right."
+
   - name: TRANSITION_PROPERTY_NONE
     type: constant
     desc: "No transition properties."
