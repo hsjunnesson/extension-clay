@@ -106,10 +106,16 @@ struct MarkupError
     MarkupErrorType m_Type;
 };
 
-MarkupResult MarkupCreate(const char* text, uint32_t text_length, HMarkup* out_markup, MarkupError* out_error);
-TextResult   TextLayoutCreateMarkup(HFontCollection collection, HMarkup markup, TextLayoutSettings* settings, HTextLayout* outlayout);
-void         MarkupDestroy(HMarkup);
-void         TextLayoutRelease(HTextLayout layout);
+MarkupResult                     MarkupCreate(const char* text, uint32_t text_length, HMarkup* out_markup, MarkupError* out_error);
+TextResult                       TextLayoutCreateMarkup(HFontCollection collection, HMarkup markup, TextLayoutSettings* settings, HTextLayout* outlayout);
+void                             MarkupDestroy(HMarkup);
+void                             TextLayoutRelease(HTextLayout layout);
+void                             TextLayoutGetBounds(HTextLayout layout, float* width, float* height);
+uint32_t                         TextLayoutGetObjectCount(HTextLayout layout);
+const TextLayoutObject*          TextLayoutGetObjects(HTextLayout layout);
+uint8_t                          TextLayoutGetObjectPosition(HTextLayout layout, const TextLayoutObject* object, float paragraph_x, float paragraph_top, float paragraph_width, float* x, float* y);
+const TextLayoutObjectAttribute* TextLayoutGetObjectAttributes(HTextLayout layout);
+const char*                      TextLayoutGetObjectSource(HTextLayout layout);
 
 namespace dmRender
 {
@@ -173,12 +179,10 @@ namespace dmGui
         CLIPPING_MODE_STENCIL = 2,
     };
 
-    typedef struct TextLayout* HTextLayout;
-
     struct TextLayout
     {
-        HTextLayout m_Handle;
-        uint64_t    m_Key;
+        ::HTextLayout m_Handle;
+        uint64_t      m_Key;
     };
 
     typedef void (*AnimationComplete)(HScene scene,
@@ -214,4 +218,6 @@ namespace dmGui
     const float*     GetNodeFlipbookAnimUV(HScene scene, HNode node);
     void             GetNodeFlipbookAnimUVFlip(HScene scene, HNode node, bool& flip_horizontal, bool& flip_vertical);
     void*            GetFont(HScene scene, dmhash_t font_hash);
+    void             PrepareNodeTextLayout(HScene scene, HNode node);
+    void             GetNodeTextLayout(HScene scene, HNode node, TextLayout* out_text_layout);
 } // namespace dmGui

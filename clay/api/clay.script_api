@@ -44,7 +44,7 @@
 
   - name: text
     type: function
-    desc: "Creates a text declaration for an element's children array."
+    desc: "Creates a text declaration for an element's children array. With Defold rich text enabled, inline `<sprite>` objects are reconciled as retained GUI box nodes at their text-layout positions. Each sprite requires an `id`. Without an override table it also requires string `src` and `animation` attributes, which are hashed by the binding. The optional third argument supplies string or Defold-hash resources keyed by `id`, and may be used instead of the markup resource attributes. For example: `Locked <sprite id=lock src=icons animation=locked width=16px height=16px/>`"
     parameters:
     - name: text
       type: "string"
@@ -52,6 +52,10 @@
     - name: config
       type: "clay.TextConfig"
       desc: "Text layout and rendering configuration."
+    - name: inline_sprites
+      type: "clay.InlineSprites"
+      desc: "Optional native resource overrides keyed by markup sprite id."
+      optional: true
     returns:
     - name: text_element
       type: "clay.Text"

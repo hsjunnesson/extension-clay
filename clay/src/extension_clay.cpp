@@ -86,12 +86,21 @@ struct dclay_image_t
     dmhash_t animation;
 };
 
+struct dclay_inline_image_t
+{
+    dmhash_t id;
+    dmhash_t texture;
+    dmhash_t animation;
+};
+
 // Defold user data associated with certain clay render commands.
 struct dclay_user_data_t
 {
     dmhash_t         layer;
     dmhash_t         border_layer;
     dmVMath::Vector4 slice9;
+    uint32_t         inline_image_index;
+    uint32_t         inline_image_count;
 };
 
 enum dclay_gui_node_type_t
@@ -99,6 +108,7 @@ enum dclay_gui_node_type_t
     DCLAY_GUI_NODE_RECTANGLE,
     DCLAY_GUI_NODE_TEXT,
     DCLAY_GUI_NODE_IMAGE,
+    DCLAY_GUI_NODE_INLINE_IMAGE,
     DCLAY_GUI_NODE_BORDER,
     DCLAY_GUI_NODE_CLIP,
 };
@@ -140,6 +150,7 @@ struct dclay_surface_t
     Clay_Vector2                    root_screen_scale;
     dmArray<dclay_font_t>           fonts;
     dmArray<dclay_image_t>          images;
+    dmArray<dclay_inline_image_t>   inline_images;
     dmArray<dclay_user_data_t>      user_data;
     dmHashTable64<dclay_gui_node_t> gui_nodes;
     dmArray<char>                   text_scratch;
@@ -485,10 +496,22 @@ static bool             g_PixelPerfect = 0;
  */
 
 /**
+ * @class clay.InlineSprite
+ * Optional native resource override for an inline rich-text sprite.
+ * @field src [type: string|hash] GUI texture or atlas name.
+ * @field animation [type: string|hash] Atlas sprite or animation name.
+ */
+
+/**
+ * @alias clay.InlineSprites [type: table<string|hash, clay.InlineSprite>] Inline sprite resources keyed by markup id.
+ */
+
+/**
  * @class clay.Text
  * Mutable text declaration returned by clay.text().
  * @field text [type: string] Text content.
  * @field config [type: clay.TextConfig] Text configuration.
+ * @field inline_sprites [type: clay.InlineSprites|nil] Optional native resources keyed by inline sprite id.
  */
 
 /**
@@ -535,6 +558,7 @@ static uint32_t dclay_CalculateReservedMemory(const dclay_surface_t* surface)
     return surface->clay_memory_size +
     dclay_ArrayReservedBytes(surface->fonts) +
     dclay_ArrayReservedBytes(surface->images) +
+    dclay_ArrayReservedBytes(surface->inline_images) +
     dclay_ArrayReservedBytes(surface->user_data) +
     dclay_HashTableReservedBytes(surface->gui_nodes) +
     dclay_ArrayReservedBytes(surface->text_scratch);
@@ -950,6 +974,8 @@ static dclay_user_data_t dclay_ParseUserData(lua_State* L, int table_index)
     user_data.layer = 0;
     user_data.border_layer = 0;
     user_data.slice9 = dmVMath::Vector4(0.0f);
+    user_data.inline_image_index = 0;
+    user_data.inline_image_count = 0;
 
     table_index = dclay_AbsIndex(L, table_index);
 
@@ -982,9 +1008,135 @@ static dclay_user_data_t dclay_ParseUserData(lua_State* L, int table_index)
     return user_data;
 }
 
+static dclay_user_data_t dclay_ParseTextUserData(lua_State* L, int table_index)
+{
+    dclay_user_data_t user_data;
+    user_data.layer = 0;
+    user_data.border_layer = 0;
+    user_data.slice9 = dmVMath::Vector4(0.0f);
+    user_data.inline_image_index = 0;
+    user_data.inline_image_count = 0;
+
+    table_index = dclay_AbsIndex(L, table_index);
+
+    lua_getfield(L, table_index, "layer");
+    if (!lua_isnil(L, -1))
+    {
+        user_data.layer = dclay_CheckHashOrString(L, -1, "layer");
+    }
+    lua_pop(L, 1);
+
+    return user_data;
+}
+
+static dmhash_t dclay_CheckInlineImageHash(lua_State* L, int index, const char* field)
+{
+    if (lua_type(L, index) != LUA_TSTRING && !dmScript::IsHash(L, index))
+    {
+        luaL_error(L, "clay inline sprite field '%s' must be a string or Defold hash", field);
+    }
+
+    if (lua_type(L, index) == LUA_TSTRING && lua_objlen(L, index) == 0)
+    {
+        luaL_error(L, "clay inline sprite field '%s' must not be empty", field);
+    }
+
+    dmhash_t value = dclay_CheckHashOrString(L, index, field);
+    if (value == 0)
+    {
+        luaL_error(L, "clay inline sprite field '%s' must not be zero", field);
+    }
+
+    return value;
+}
+
+static void dclay_ParseInlineImages(lua_State* L, int index, dclay_user_data_t* user_data)
+{
+    index = dclay_AbsIndex(L, index);
+    luaL_checktype(L, index, LUA_TTABLE);
+
+    user_data->inline_image_index = g_ActiveSurface->inline_images.Size();
+
+    lua_pushnil(L);
+    while (lua_next(L, index) != 0)
+    {
+        dmhash_t id = dclay_CheckInlineImageHash(L, -2, "inline_sprites key");
+        luaL_checktype(L, -1, LUA_TTABLE);
+        int image_index = dclay_AbsIndex(L, -1);
+
+        for (uint32_t i = 0; i < user_data->inline_image_count; ++i)
+        {
+            if (g_ActiveSurface->inline_images[user_data->inline_image_index + i].id == id)
+            {
+                luaL_error(L, "clay inline sprite id '%s' is duplicated", dmHashReverseSafe64(id));
+            }
+        }
+
+        lua_getfield(L, image_index, "src");
+        if (lua_isnil(L, -1))
+        {
+            luaL_error(L, "clay inline sprite '%s' requires a src field", dmHashReverseSafe64(id));
+        }
+        dmhash_t texture = dclay_CheckInlineImageHash(L, -1, "src");
+        lua_pop(L, 1);
+
+        lua_getfield(L, image_index, "animation");
+        if (lua_isnil(L, -1))
+        {
+            luaL_error(L, "clay inline sprite '%s' requires an animation field", dmHashReverseSafe64(id));
+        }
+        dmhash_t animation = dclay_CheckInlineImageHash(L, -1, "animation");
+        lua_pop(L, 1);
+
+        if (g_ActiveSurface->inline_images.Full())
+        {
+            luaL_error(L, "Clay inline-sprite table exhausted (%u entries)", g_ActiveSurface->inline_images.Capacity());
+        }
+
+        dclay_inline_image_t image = { id, texture, animation };
+        g_ActiveSurface->inline_images.Push(image);
+        ++user_data->inline_image_count;
+
+        lua_pop(L, 1);
+    }
+}
+
+#if defined(DM_DEBUG)
+static void dclay_ValidateInlineImages(lua_State* L, int index)
+{
+    index = dclay_AbsIndex(L, index);
+    luaL_checktype(L, index, LUA_TTABLE);
+
+    lua_pushnil(L);
+    while (lua_next(L, index) != 0)
+    {
+        dclay_CheckInlineImageHash(L, -2, "inline_sprites key");
+        luaL_checktype(L, -1, LUA_TTABLE);
+
+        lua_getfield(L, -1, "src");
+        if (lua_isnil(L, -1))
+        {
+            luaL_error(L, "clay inline sprite requires a src field");
+        }
+        dclay_CheckInlineImageHash(L, -1, "src");
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "animation");
+        if (lua_isnil(L, -1))
+        {
+            luaL_error(L, "clay inline sprite requires an animation field");
+        }
+        dclay_CheckInlineImageHash(L, -1, "animation");
+        lua_pop(L, 1);
+
+        lua_pop(L, 1);
+    }
+}
+#endif
+
 static dclay_user_data_t* dclay_StoreUserData(lua_State* L, const dclay_user_data_t& value)
 {
-    if (value.layer == 0 && value.border_layer == 0 && dclay_IsZeroVector4(value.slice9))
+    if (value.layer == 0 && value.border_layer == 0 && dclay_IsZeroVector4(value.slice9) && value.inline_image_count == 0)
     {
         return 0;
     }
@@ -1347,10 +1499,10 @@ static void dclay_ValidateNodeIds(lua_State* L, int index)
         }
         lua_pop(L, 1);
 
-        lua_getfield(L, -1, "slice9");
+        lua_getfield(L, index, "inline_sprites");
         if (!lua_isnil(L, -1))
         {
-            dclay_CheckVector4(L, -1, "slice9");
+            dclay_ValidateInlineImages(L, -1);
         }
         lua_pop(L, 2);
 
@@ -1505,9 +1657,18 @@ static void dclay_EmitText(lua_State* L, int index)
     if (!lua_isnil(L, -1))
     {
         luaL_checktype(L, -1, LUA_TTABLE);
-        int config_index = dclay_AbsIndex(L, -1);
+        int               config_index = dclay_AbsIndex(L, -1);
 
-        config.userData = dclay_StoreUserData(L, dclay_ParseUserData(L, config_index));
+        dclay_user_data_t user_data = dclay_ParseTextUserData(L, config_index);
+
+        lua_getfield(L, index, "inline_sprites");
+        if (!lua_isnil(L, -1))
+        {
+            dclay_ParseInlineImages(L, -1, &user_data);
+        }
+        lua_pop(L, 1);
+
+        config.userData = dclay_StoreUserData(L, user_data);
 
         lua_getfield(L, config_index, "font_id");
         if (lua_isnil(L, -1))
@@ -1724,9 +1885,9 @@ static Clay_Dimensions dclay_MeasureText(Clay_StringSlice text, Clay_TextElement
     return dimensions;
 }
 
-// This intentionally matches the current GUI renderer behavior. Inline
-// sprites reserve their requested dimensions, but the GUI renderer does not
-// yet resolve or draw a sprite resource for them.
+// The text layout reserves the requested inline-object dimensions. Retained
+// GUI image nodes are resolved from the resulting layout objects later, when
+// the text command is reconciled.
 static uint8_t dclay_ResolveTextLayoutObject(void*, const char*, const TextLayoutObjectAttribute*, float proposed_width, float proposed_height, TextLayoutObject* object)
 {
     object->m_Width = proposed_width;
@@ -1889,6 +2050,17 @@ static void dclay_GetPivotFactors(dmGui::Pivot pivot, float* x, float* y)
 static uint64_t dclay_CommandKey(const Clay_RenderCommand& command, dclay_gui_node_type_t type)
 {
     return ((uint64_t)command.id << 32) | (uint32_t)type;
+}
+
+static uint64_t dclay_InlineImageKey(const Clay_RenderCommand& command, uint64_t object_id)
+{
+    HashState64 state;
+    uint32_t    type = DCLAY_GUI_NODE_INLINE_IMAGE;
+    dmHashInit64(&state, false);
+    dmHashUpdateBuffer64(&state, &command.id, sizeof(command.id));
+    dmHashUpdateBuffer64(&state, &type, sizeof(type));
+    dmHashUpdateBuffer64(&state, &object_id, sizeof(object_id));
+    return dmHashFinal64(&state);
 }
 
 static void dclay_ApplyCommandLayer(dclay_surface_t* surface, dclay_gui_node_t* entry, const Clay_RenderCommand& command)
@@ -2144,9 +2316,8 @@ static bool dclay_NewGuiNode(dclay_surface_t* surface, dclay_gui_node_type_t typ
     return true;
 }
 
-static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_gui_node_type_t type, dmGui::HNode parent)
+static dclay_gui_node_t* dclay_GetOrCreateGuiNodeWithKey(dclay_surface_t* surface, uint64_t key, const Clay_RenderCommand& command, dclay_gui_node_type_t type, dmGui::HNode parent)
 {
-    uint64_t          key = dclay_CommandKey(command, type);
     dclay_gui_node_t* entry = surface->gui_nodes.Get(key);
 
     if (entry)
@@ -2200,6 +2371,11 @@ static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, cons
 #endif
 
     return entry;
+}
+
+static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, const Clay_RenderCommand& command, dclay_gui_node_type_t type, dmGui::HNode parent)
+{
+    return dclay_GetOrCreateGuiNodeWithKey(surface, dclay_CommandKey(command, type), command, type, parent);
 }
 
 static void dclay_SetCommandTransform(dclay_surface_t* surface, dmGui::HNode node, const Clay_BoundingBox& box, float scale, const Clay_BoundingBox* parent_box, float pivot_x = 0.0f)
@@ -2306,6 +2482,57 @@ static bool dclay_SetNodeImage(dclay_surface_t* surface, dclay_gui_node_t* entry
     return true;
 }
 
+static bool dclay_LayoutObjectAttributeEquals(const char* source, const TextLayoutObjectAttribute& attribute, const char* name)
+{
+    uint32_t name_length = (uint32_t)strlen(name);
+    return attribute.m_NameLength == name_length && memcmp(source + attribute.m_NameOffset, name, name_length) == 0;
+}
+
+static const TextLayoutObjectAttribute* dclay_FindLayoutObjectAttribute(const TextLayoutObject& object, const TextLayoutObjectAttribute* attributes, const char* source, const char* name)
+{
+    for (uint32_t i = 0; i < object.m_AttributeCount; ++i)
+    {
+        const TextLayoutObjectAttribute& attribute = attributes[object.m_AttributeIndex + i];
+        if (dclay_LayoutObjectAttributeEquals(source, attribute, name))
+        {
+            return &attribute;
+        }
+    }
+
+    return 0;
+}
+
+static bool dclay_GetLayoutObjectHash(const TextLayoutObject& object, const TextLayoutObjectAttribute* attributes, const char* source, const char* name, dmhash_t* hash)
+{
+    const TextLayoutObjectAttribute* attribute = dclay_FindLayoutObjectAttribute(object, attributes, source, name);
+    if (!attribute || attribute->m_ValueLength == 0)
+    {
+        return false;
+    }
+
+    *hash = dmHashBuffer64(source + attribute->m_ValueOffset, attribute->m_ValueLength);
+    return true;
+}
+
+static const dclay_inline_image_t* dclay_FindInlineImage(const dclay_surface_t* surface, const dclay_user_data_t* user_data, dmhash_t id)
+{
+    if (!user_data)
+    {
+        return 0;
+    }
+
+    for (uint32_t i = 0; i < user_data->inline_image_count; ++i)
+    {
+        const dclay_inline_image_t& image = surface->inline_images[user_data->inline_image_index + i];
+        if (image.id == id)
+        {
+            return &image;
+        }
+    }
+
+    return 0;
+}
+
 static void dclay_OrderGuiNode(dclay_surface_t* surface, dmGui::HNode parent, dmGui::HNode node, dmGui::HNode previous)
 {
     if (previous != dmGui::INVALID_HANDLE)
@@ -2319,6 +2546,140 @@ static void dclay_OrderGuiNode(dclay_surface_t* surface, dmGui::HNode parent, dm
     if (first != dmGui::INVALID_HANDLE && first != node)
     {
         dmGui::MoveNodeBelow(surface->gui_scene, node, first);
+    }
+}
+
+static bool dclay_HasInlineSprite(const Clay_StringSlice& text)
+{
+    static const char tag[] = "<sprite";
+    const int32_t     tag_length = sizeof(tag) - 1;
+    if (text.length < tag_length)
+    {
+        return false;
+    }
+
+    for (int32_t i = 0; i <= text.length - tag_length; ++i)
+    {
+        if (memcmp(text.chars + i, tag, tag_length) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void dclay_UpdateInlineImageNodes(dclay_surface_t* surface, const Clay_RenderCommand& command, dmGui::HNode text_node, dclay_scope_t& scope, float scale, float pivot_x, const Clay_Color* overlays, uint32_t overlay_count)
+{
+    static const dmhash_t sprite_tag = dmHashString64("sprite");
+
+    if (!dclay_HasInlineSprite(command.renderData.text.stringContents))
+    {
+        return;
+    }
+
+    dmGui::PrepareNodeTextLayout(surface->gui_scene, text_node);
+
+    dmGui::TextLayout gui_layout = {};
+    dmGui::GetNodeTextLayout(surface->gui_scene, text_node, &gui_layout);
+    HTextLayout layout = gui_layout.m_Handle;
+    if (!layout)
+    {
+        return;
+    }
+
+    uint32_t                         object_count = TextLayoutGetObjectCount(layout);
+    const TextLayoutObject*          objects = TextLayoutGetObjects(layout);
+    const TextLayoutObjectAttribute* attributes = TextLayoutGetObjectAttributes(layout);
+    const char*                      source = TextLayoutGetObjectSource(layout);
+    float                            layout_width = 0.0f;
+    float                            layout_height = 0.0f;
+    TextLayoutGetBounds(layout, &layout_width, &layout_height);
+    (void)layout_height;
+
+    for (uint32_t i = 0; i < object_count; ++i)
+    {
+        const TextLayoutObject& object = objects[i];
+        if (object.m_Tag != sprite_tag)
+        {
+            continue;
+        }
+
+        const TextLayoutObjectAttribute* id_attribute = dclay_FindLayoutObjectAttribute(object, attributes, source, "id");
+        dmhash_t                         texture = 0;
+        dmhash_t                         animation = 0;
+        bool                             valid_id = id_attribute && id_attribute->m_ValueLength > 0;
+        const dclay_user_data_t*         user_data = (const dclay_user_data_t*)command.userData;
+        const dclay_inline_image_t*      inline_image = valid_id ? dclay_FindInlineImage(surface, user_data, object.m_Id) : 0;
+        bool                             valid_texture;
+        bool                             valid_animation;
+
+        if (inline_image)
+        {
+            texture = inline_image->texture;
+            animation = inline_image->animation;
+            valid_texture = true;
+            valid_animation = true;
+        }
+        else
+        {
+            valid_texture = dclay_GetLayoutObjectHash(object, attributes, source, "src", &texture);
+            valid_animation = dclay_GetLayoutObjectHash(object, attributes, source, "animation", &animation);
+        }
+
+        if (!valid_id || !valid_texture || !valid_animation)
+        {
+            dmLogError("Clay inline <sprite> in text command %u requires an id and either src/animation attributes or a matching clay.text() inline-sprite entry", command.id);
+            continue;
+        }
+
+        bool duplicate_id = false;
+        for (uint32_t j = 0; j < i; ++j)
+        {
+            if (objects[j].m_Tag == sprite_tag && objects[j].m_Id == object.m_Id)
+            {
+                duplicate_id = true;
+                break;
+            }
+        }
+
+        if (duplicate_id)
+        {
+            dmLogError("Clay inline <sprite> id '%s' is duplicated in text command %u", dmHashReverseSafe64(object.m_Id), command.id);
+            continue;
+        }
+
+        float object_x = 0.0f;
+        float object_y = 0.0f;
+        if (!TextLayoutGetObjectPosition(layout, &object, 0.0f, 0.0f, layout_width, &object_x, &object_y))
+        {
+            continue;
+        }
+
+        uint64_t          key = dclay_InlineImageKey(command, object.m_Id);
+        dclay_gui_node_t* entry = dclay_GetOrCreateGuiNodeWithKey(surface, key, command, DCLAY_GUI_NODE_INLINE_IMAGE, scope.parent);
+        if (!entry || !dclay_SetNodeImage(surface, entry, texture, animation))
+        {
+            continue;
+        }
+
+        float            node_width = scale > 0.0f ? command.boundingBox.width / scale : command.boundingBox.width;
+        float            layout_x = (node_width - layout_width) * pivot_x;
+        Clay_BoundingBox box = {
+            command.boundingBox.x + (layout_x + object_x) * scale,
+            command.boundingBox.y - (object_y + object.m_Height) * scale,
+            object.m_Width * scale,
+            object.m_Height * scale,
+        };
+
+        dclay_SetCommandTransform(surface, entry->node, box, 1.0f, dclay_GetScopeBox(scope));
+        dclay_SetNodeRoundedRectConstants(surface, entry, {});
+
+        Clay_Color color = dclay_ApplyOverlays({ 255, 255, 255, 255 }, overlays, overlay_count);
+        dmGui::SetNodeProperty(surface->gui_scene, entry->node, dmGui::PROPERTY_COLOR, dmVMath::Vector4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f));
+
+        dclay_OrderGuiNode(surface, scope.parent, entry->node, scope.previous);
+        scope.previous = entry->node;
     }
 }
 
@@ -2406,6 +2767,8 @@ static bool dclay_UpdateTextNode(dclay_surface_t* surface, const Clay_RenderComm
     dclay_OrderGuiNode(surface, scope.parent, entry->node, scope.previous);
 
     scope.previous = entry->node;
+
+    dclay_UpdateInlineImageNodes(surface, command, entry->node, scope, scale, pivot_x, overlays, overlay_count);
 
     return true;
 }
@@ -2830,8 +3193,14 @@ static int dclay_Initialize(lua_State* L)
         return DM_LUA_ERROR("Clay_Initialize failed");
     }
 
+    surface->inline_images.SetCapacity((uint32_t)max_element_count);
     surface->user_data.SetCapacity((uint32_t)max_element_count);
-    surface->gui_nodes.SetCapacity((uint32_t)max_element_count);
+
+    // A text element can own an additional retained box node for an inline
+    // sprite even though Clay still emits only one text render command.
+    // Reserve that common worst case up front so reconciliation remains free
+    // from table growth and allocation.
+    surface->gui_nodes.SetCapacity((uint32_t)max_element_count * 2);
 
     Clay_SetMeasureTextFunction(dclay_MeasureText, surface);
     Clay_SetLayoutTextFunction(dclay_LayoutText, surface);
@@ -2866,6 +3235,7 @@ static int dclay_LayoutProtected(lua_State* L)
     dclay_ValidateNodeIds(L, 2);
 #endif
 
+    surface->inline_images.SetSize(0);
     surface->user_data.SetSize(0);
 
     // GetNodeSize() is only the authored size. The calculated world transform
@@ -3091,14 +3461,26 @@ static int dclay_SizingPercent(lua_State* L)
 
 /**
  * Creates a text declaration for an element's children array.
- * @name clay.text(text, config)
+ *
+ * With Defold rich text enabled, inline `<sprite>` objects are reconciled as
+ * retained GUI box nodes at their text-layout positions. Each sprite requires
+ * an `id`. Without an override table it also requires string `src` and
+ * `animation` attributes, which are hashed by the binding. The optional third
+ * argument supplies string or Defold-hash resources keyed by `id`, and may be
+ * used instead of the markup resource attributes. For example:
+ *
+ * `Locked <sprite id=lock src=icons animation=locked width=16px height=16px/>`
+ * @name clay.text(text, config, inline_sprites)
  * @param text [type: string] Text content.
  * @param config [type: clay.TextConfig] Text layout and rendering configuration.
+ * @param inline_sprites [type: clay.InlineSprites|nil] Optional native resource overrides keyed by markup sprite id.
  * @return text_element [type: clay.Text] Mutable text declaration.
  */
 static int dclay_Text(lua_State* L)
 {
     DM_LUA_STACK_CHECK(L, 1);
+
+    bool has_inline_sprites = !lua_isnoneornil(L, 3);
 
     luaL_checkstring(L, 1);
 
@@ -3107,7 +3489,12 @@ static int dclay_Text(lua_State* L)
         luaL_checktype(L, 2, LUA_TTABLE);
     }
 
-    lua_createtable(L, 0, 2);
+    if (has_inline_sprites)
+    {
+        luaL_checktype(L, 3, LUA_TTABLE);
+    }
+
+    lua_createtable(L, 0, 3);
 
     lua_pushvalue(L, 1);
     lua_setfield(L, -2, "text");
@@ -3122,6 +3509,12 @@ static int dclay_Text(lua_State* L)
     }
 
     lua_setfield(L, -2, "config");
+
+    if (has_inline_sprites)
+    {
+        lua_pushvalue(L, 3);
+        lua_setfield(L, -2, "inline_sprites");
+    }
 
     luaL_getmetatable(L, TEXT_META);
     lua_setmetatable(L, -2);

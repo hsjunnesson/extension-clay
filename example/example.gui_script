@@ -64,6 +64,13 @@ function on_input(self, action_id, action)
 	end
 end
 
+function on_message(self, message_id, message)
+	if message_id == hash("text_object_clicked") then
+		assert(message.type == hash("link"))
+		print(message.id, message.src)
+	end
+end
+
 local function cell_on_hover(t, pointer)
 	t.background_color = vmath.vector3(0.25, 0.29, 0.37)
 	local tooltip = t.tooltip
@@ -416,6 +423,12 @@ function update(self, dt)
 							text_color = vmath.vector3(0.8, 0.8, 0.8),
 							text_alignment = clay.TEXT_ALIGN_CENTER,
 							letter_spacing = 4,
+						}),
+						clay.text("<sprite id=whep src=example animation=whep width=24px height=24px /> <link id=click src=whep>WHEP</link>", {
+							font_id = self.h.heading,
+							font_size = 16,
+							layer = self.h.text,
+							text_color = vmath.vector3(0.1, 0.1, 0.1),
 						}),
 					},
 				},

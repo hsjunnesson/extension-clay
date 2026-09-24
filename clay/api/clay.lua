@@ -208,6 +208,9 @@ clay = {}
 ---| `clay.POINTER_RELEASED_THIS_FRAME`
 ---| `clay.POINTER_RELEASED`
 
+---Inline sprite resources keyed by markup id.
+---@alias clay.InlineSprites table<string|hash, clay.InlineSprite>
+
 ---A per-root Clay context and retained Defold GUI subtree.
 ---@class clay.Surface
 
@@ -336,10 +339,16 @@ clay = {}
 ---@field text_alignment? clay.TextAlignment Horizontal alignment of wrapped lines; defaults to clay.TEXT_ALIGN_LEFT.
 ---@field layer? string|hash Explicit GUI layer; layers are not inherited.
 
+---Optional native resource override for an inline rich-text sprite.
+---@class clay.InlineSprite
+---@field src string|hash GUI texture or atlas name.
+---@field animation string|hash Atlas sprite or animation name.
+
 ---Mutable text declaration returned by clay.text().
 ---@class clay.Text
 ---@field text string Text content.
 ---@field config clay.TextConfig Text configuration.
+---@field inline_sprites? clay.InlineSprites Optional native resources keyed by inline sprite id.
 
 ---Retained scroll-container state.
 ---@class clay.ScrollContainerData
@@ -365,11 +374,12 @@ function clay.destroy(surface) end
 ---@param dt? number Frame delta time in seconds; defaults to zero.
 function clay.layout(surface, root, dt) end
 
----Creates a text declaration for an element's children array.
+---Creates a text declaration for an element's children array. With Defold rich text enabled, inline `<sprite>` objects are reconciled as retained GUI box nodes at their text-layout positions. Each sprite requires an `id`. Without an override table it also requires string `src` and `animation` attributes, which are hashed by the binding. The optional third argument supplies string or Defold-hash resources keyed by `id`, and may be used instead of the markup resource attributes. For example: `Locked <sprite id=lock src=icons animation=locked width=16px height=16px/>`
 ---@param text string Text content.
 ---@param config clay.TextConfig Text layout and rendering configuration.
+---@param inline_sprites? clay.InlineSprites Optional native resource overrides keyed by markup sprite id.
 ---@return clay.Text text_element Mutable text declaration.
-function clay.text(text, config) end
+function clay.text(text, config, inline_sprites) end
 
 ---Creates a global Clay string ID.
 ---@param value string ID string.
