@@ -7,14 +7,18 @@ shared_state = 1
 [display]
 width = 1280
 height = 720
+samples = 8
 
 [project]
 title = extension-clay
 
 [library]
 include_dirs = clay
-defold_min_version = 1.13.0
+defold_min_version = 1.13.2
 
 [input]
 game_binding = /builtins/input/all.input_bindingc
+
+[native_extension]
+app_manifest = /example/example.appmanifest
 

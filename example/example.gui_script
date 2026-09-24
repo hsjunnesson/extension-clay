@@ -409,11 +409,11 @@ function update(self, dt)
 						animation = self.h.square,
 					},
 					children = {
-						clay.text("nine SLICED example", {
+						clay.text("<shadow x=6 y=-6 blur=4 color=#141923><wave><outline size=3 color=#141923>nine SLICED example</outline></wave></shadow>", {
 							font_id = self.h.joyful,
 							font_size = 36,
 							layer = self.h.text,
-							text_color = vmath.vector3(0.1, 0.1, 0.1),
+							text_color = vmath.vector3(0.8, 0.8, 0.8),
 							text_alignment = clay.TEXT_ALIGN_CENTER,
 							letter_spacing = 4,
 						}),

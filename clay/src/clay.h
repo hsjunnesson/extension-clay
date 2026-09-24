@@ -1,6 +1,36 @@
 // VERSION: 0.14
 
 /*
+ * DEFOLD VENDORED CHANGES
+ *
+ * This is Clay 0.14 with local changes required by the Defold integration.
+ * Search for "DEFOLD VENDORED CHANGE [DCLAY-" to find every changed region.
+ * When replacing this file with a newer upstream clay.h, review and reapply
+ * each entry below individually; remove an entry only after verifying that the
+ * new upstream version has equivalent behavior.
+ *
+ * [DCLAY-01] Transition storage follows maxElementCount instead of the upstream
+ *             fixed capacity of 200.
+ * [DCLAY-02] Synthetic scissors around clipped floating roots copy the source
+ *             clip's horizontal and vertical flags.
+ * [DCLAY-03] Image/custom elements with a background do not also emit an opaque
+ *             rectangle over the same bounds.
+ * [DCLAY-04] Optional renderer-owned paragraph layout. A complete string is
+ *             measured at preferred and constrained widths and emitted as one
+ *             text command. This keeps one declaration mapped to one retained
+ *             renderer node for plain text as well as rich text; parsing rich
+ *             markup is the renderer integration's responsibility. The Defold
+ *             binding targets the 1.13.2 text-layout API. Linking font_richtext
+ *             enables markup parsing; linking font_richtext_null makes parsing
+ *             report unsupported, after which the binding measures the same
+ *             source as plain text. The original Clay word/line path remains
+ *             the fallback when no callback is installed, and WebAssembly
+ *             always uses that fallback.
+ * [DCLAY-05] Debug-inspector text is entity-escaped so a rich-text renderer
+ *             displays source markup literally instead of applying it.
+ */
+
+/*
     NOTE: In order to use this library you must define
     the following macro in exactly one file, _before_ including clay.h:
 
@@ -410,6 +440,15 @@ typedef struct Clay_TextElementConfig {
 
 CLAY__WRAPPER_STRUCT(Clay_TextElementConfig);
 
+// DEFOLD VENDORED CHANGE [DCLAY-04]: renderer-owned paragraph result.
+// The result of laying out a complete text element in a renderer-owned text
+// system. Unlike Clay's ordinary text measurement callback, this operates on
+// the complete source string rather than individual word slices.
+typedef struct Clay_TextLayoutResult {
+    Clay_Dimensions dimensions;
+    float minWidth;
+} Clay_TextLayoutResult;
+
 // Aspect Ratio --------------------------------
 
 // Controls various settings related to aspect ratio scaling element.
@@ -657,6 +696,13 @@ typedef struct Clay_TextRenderData {
     uint16_t letterSpacing;
     // The height of the bounding box for this line of text.
     uint16_t lineHeight;
+    // DEFOLD VENDORED CHANGE [DCLAY-04]: preserve paragraph configuration for
+    // the renderer. These fields are zero-initialized on upstream line commands.
+    // They are populated when a renderer-owned paragraph layout emits
+    // the complete text element as one command.
+    Clay_TextElementConfigWrapMode wrapMode;
+    Clay_TextAlignment textAlignment;
+    bool paragraphLayout;
 } Clay_TextRenderData;
 
 // Render command data when commandType == CLAY_RENDER_COMMAND_TYPE_RECTANGLE
@@ -1002,6 +1048,13 @@ CLAY_DLL_EXPORT Clay_ScrollContainerData Clay_GetScrollContainerData(Clay_Elemen
 // - measureTextFunction is a user provided function that adheres to the interface Clay_Dimensions (Clay_StringSlice text, Clay_TextElementConfig *config, void *userData);
 // - userData is a pointer that will be transparently passed through when the measureTextFunction is called.
 CLAY_DLL_EXPORT void Clay_SetMeasureTextFunction(Clay_Dimensions (*measureTextFunction)(Clay_StringSlice text, Clay_TextElementConfig *config, void *userData), void *userData);
+// DEFOLD VENDORED CHANGE [DCLAY-04]: optional complete-paragraph callback.
+// Binds an optional paragraph layout callback for renderers that own text
+// shaping and wrapping. Clay calls this with the complete source string. A
+// maxWidth <= 0 requests preferred, unconstrained dimensions and minWidth;
+// positive maxWidth requests the final paragraph dimensions at that width.
+// When set, Clay emits one text render command for the complete paragraph.
+CLAY_DLL_EXPORT void Clay_SetLayoutTextFunction(Clay_TextLayoutResult (*layoutTextFunction)(Clay_String text, Clay_TextElementConfig *config, float maxWidth, void *userData), void *userData);
 // Experimental - Used in cases where Clay needs to integrate with a system that manages its own scrolling containers externally.
 // Please reach out if you plan to use this function, as it may be subject to change.
 CLAY_DLL_EXPORT void Clay_SetQueryScrollOffsetFunction(Clay_Vector2 (*queryScrollOffsetFunction)(uint32_t elementId, void *userData), void *userData);
@@ -1346,6 +1399,8 @@ struct Clay_Context {
     uint32_t generation;
     uintptr_t arenaResetOffset;
     void *measureTextUserData;
+    // DEFOLD VENDORED CHANGE [DCLAY-04]: callback state is context-specific.
+    void *layoutTextUserData;
     void *queryScrollOffsetUserData;
     Clay_Arena internalArena;
     // Layout Elements / Render Commands
@@ -1400,8 +1455,19 @@ Clay_String Clay__WriteStringToCharBuffer(Clay__charArray *buffer, Clay_String s
     __attribute__((import_module("clay"), import_name("queryScrollOffsetFunction"))) Clay_Vector2 Clay__QueryScrollOffset(uint32_t elementId, void *userData);
 #else
     Clay_Dimensions (*Clay__MeasureText)(Clay_StringSlice text, Clay_TextElementConfig *config, void *userData);
+    // DEFOLD VENDORED CHANGE [DCLAY-04]: native-only paragraph callback.
+    Clay_TextLayoutResult (*Clay__LayoutText)(Clay_String text, Clay_TextElementConfig *config, float maxWidth, void *userData);
     Clay_Vector2 (*Clay__QueryScrollOffset)(uint32_t elementId, void *userData);
 #endif
+
+// DEFOLD VENDORED CHANGE [DCLAY-04]: WASM retains upstream text behavior.
+bool Clay__HasLayoutTextFunction(void) {
+    #ifdef CLAY_WASM
+    return false;
+    #else
+    return Clay__LayoutText != NULL;
+    #endif
+}
 
 Clay_LayoutElement* Clay__GetOpenLayoutElement(void) {
     Clay_Context* context = Clay_GetCurrentContext();
@@ -1616,6 +1682,16 @@ uint32_t Clay__HashStringContentsWithConfig(Clay_String *text, Clay_TextElementC
     hash += (hash << 10);
     hash ^= (hash >> 6);
 
+    // DEFOLD VENDORED CHANGE [DCLAY-04]: complete paragraph metrics depend on
+    // leading and wrap mode as well as the fields hashed by upstream Clay.
+    hash += config->lineHeight;
+    hash += (hash << 10);
+    hash ^= (hash >> 6);
+
+    hash += config->wrapMode;
+    hash += (hash << 10);
+    hash ^= (hash >> 6);
+
     hash += (hash << 3);
     hash ^= (hash >> 11);
     hash += (hash << 15);
@@ -1639,7 +1715,8 @@ Clay__MeasuredWord *Clay__AddMeasuredWord(Clay__MeasuredWord word, Clay__Measure
 Clay__MeasureTextCacheItem *Clay__MeasureTextCached(Clay_String *text, Clay_TextElementConfig *config) {
     Clay_Context* context = Clay_GetCurrentContext();
     #ifndef CLAY_WASM
-    if (!Clay__MeasureText) {
+    // DEFOLD VENDORED CHANGE [DCLAY-04]: either callback can provide metrics.
+    if (!Clay__MeasureText && !Clay__HasLayoutTextFunction()) {
         if (!context->booleanWarnings.textMeasurementFunctionNotSet) {
             context->booleanWarnings.textMeasurementFunctionNotSet = true;
             context->errorHandler.errorHandlerFunction(CLAY__INIT(Clay_ErrorData) {
@@ -1708,6 +1785,22 @@ Clay__MeasureTextCacheItem *Clay__MeasureTextCached(Clay_String *text, Clay_Text
         measured = Clay__MeasureTextCacheItemArray_Add(&context->measureTextHashMapInternal, newCacheItem);
         newItemIndex = context->measureTextHashMapInternal.length - 1;
     }
+
+    // DEFOLD VENDORED CHANGE [DCLAY-04]: cache preferred paragraph dimensions
+    // without splitting markup source into independently measured word slices.
+    #ifndef CLAY_WASM
+    if (Clay__HasLayoutTextFunction()) {
+        Clay_TextLayoutResult layout = Clay__LayoutText(*text, config, 0, context->layoutTextUserData);
+        measured->unwrappedDimensions = layout.dimensions;
+        measured->minWidth = layout.minWidth;
+        if (elementIndexPrevious != 0) {
+            Clay__MeasureTextCacheItemArray_Get(&context->measureTextHashMapInternal, elementIndexPrevious)->nextIndex = newItemIndex;
+        } else {
+            context->measureTextHashMap.internalArray[hashBucket] = newItemIndex;
+        }
+        return measured;
+    }
+    #endif
 
     int32_t start = 0;
     int32_t end = 0;
@@ -2249,7 +2342,8 @@ void Clay__InitializePersistentMemory(Clay_Context* context) {
     Clay_Arena *arena = &context->internalArena;
 
     context->scrollContainerDatas = Clay__ScrollContainerDataInternalArray_Allocate_Arena(100, arena);
-    // Transition state is keyed by element ID, so its capacity should follow
+    // DEFOLD VENDORED CHANGE [DCLAY-01]: transition state is keyed by element
+    // ID, so its capacity should follow
     // the same per-context element limit instead of imposing a separate 200
     // element ceiling. Clay_MinMemorySize() uses this allocation path too.
     context->transitionDatas = Clay__TransitionDataInternalArray_Allocate_Arena(maxElementCount, arena);
@@ -2546,6 +2640,45 @@ Clay_String Clay__IntToString(int32_t integer) {
     return CLAY__INIT(Clay_String) { .length = length, .chars = chars };
 }
 
+// DEFOLD VENDORED CHANGE [DCLAY-05]: escape debug text for rich renderers.
+// Clay's debug hierarchy displays the source of text elements. Defold GUI text
+// nodes interpret that source as rich-text markup, so copy the preview with XML
+// entities for the three syntax characters. This keeps the inspector diagnostic:
+// user markup is shown literally instead of styling or resizing the inspector.
+Clay_String Clay__EscapeTextForDebugView(Clay_String text) {
+    Clay_Context* context = Clay_GetCurrentContext();
+    int32_t start = context->dynamicStringData.length;
+
+    for (int32_t i = 0; i < text.length; ++i) {
+        const char* replacement = NULL;
+        int32_t replacementLength = 0;
+        switch (text.chars[i]) {
+            case '&': replacement = "&amp;"; replacementLength = 5; break;
+            case '<': replacement = "&lt;"; replacementLength = 4; break;
+            case '>': replacement = "&gt;"; replacementLength = 4; break;
+            default: break;
+        }
+
+        int32_t writeLength = replacement ? replacementLength : 1;
+        if (context->dynamicStringData.length + writeLength > context->dynamicStringData.capacity) {
+            break;
+        }
+
+        if (replacement) {
+            for (int32_t j = 0; j < replacementLength; ++j) {
+                context->dynamicStringData.internalArray[context->dynamicStringData.length++] = replacement[j];
+            }
+        } else {
+            context->dynamicStringData.internalArray[context->dynamicStringData.length++] = text.chars[i];
+        }
+    }
+
+    return CLAY__INIT(Clay_String) {
+        .length = context->dynamicStringData.length - start,
+        .chars = (const char *)(context->dynamicStringData.internalArray + start),
+    };
+}
+
 void Clay__AddRenderCommand(Clay_RenderCommand renderCommand) {
     Clay_Context* context = Clay_GetCurrentContext();
     if (context->renderCommands.length < context->renderCommands.capacity - 1) {
@@ -2589,6 +2722,19 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
         Clay__TextElementData *textElementData = &element->textElementData;
         textElementData->wrappedLines = CLAY__INIT(Clay__WrappedTextLineArraySlice) { .length = 0, .internalArray = &context->wrappedTextLines.internalArray[context->wrappedTextLines.length] };
         Clay_LayoutElement *containerElement = Clay_LayoutElementArray_Get(&context->layoutElements, Clay__int32_tArray_GetValue(&textElements, textElementIndex));
+        // DEFOLD VENDORED CHANGE [DCLAY-04]: after horizontal sizing, ask the
+        // renderer for the height of the paragraph at its assigned width.
+        #ifndef CLAY_WASM
+        if (Clay__HasLayoutTextFunction()) {
+            if (containerElement->textConfig.wrapMode == CLAY_TEXT_WRAP_WORDS && textElementData->preferredDimensions.width > containerElement->dimensions.width) {
+                Clay_TextLayoutResult layout = Clay__LayoutText(textElementData->text, &containerElement->textConfig, containerElement->dimensions.width, context->layoutTextUserData);
+                containerElement->dimensions.height = layout.dimensions.height;
+            } else {
+                containerElement->dimensions.height = textElementData->preferredDimensions.height;
+            }
+            continue;
+        }
+        #endif
         Clay__MeasureTextCacheItem *measureTextCacheItem = Clay__MeasureTextCached(&textElementData->text, &containerElement->textConfig);
         float lineWidth = 0;
         float lineHeight = containerElement->textConfig.lineHeight > 0 ? (float)containerElement->textConfig.lineHeight : textElementData->preferredDimensions.height;
@@ -2797,7 +2943,8 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
                     Clay__AddRenderCommand(CLAY__INIT(Clay_RenderCommand) {
                         .boundingBox = clipHashMapItem->boundingBox,
                         /*
-                         * DEFOLD VENDORED FIX / UPSTREAM BUG REPORT NOTES
+                         * DEFOLD VENDORED CHANGE [DCLAY-02]
+                         * UPSTREAM BUG REPORT NOTES
                          *
                          * A floating layout root with
                          * CLAY_CLIP_TO_ATTACHED_PARENT is rendered separately
@@ -3001,42 +3148,72 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
             if (generateRenderCommands && !offscreen) {
                 if (currentElement->isTextElement) {
                     Clay_TextElementConfig *textElementConfig = &currentElement->textConfig;
-                    float naturalLineHeight = currentElement->textElementData.preferredDimensions.height;
-                    float finalLineHeight = textElementConfig->lineHeight > 0 ? (float)textElementConfig->lineHeight : naturalLineHeight;
-                    float lineHeightOffset = (finalLineHeight - naturalLineHeight) / 2;
-                    float yPosition = lineHeightOffset;
-                    for (int32_t lineIndex = 0; lineIndex < currentElement->textElementData.wrappedLines.length; ++lineIndex) {
-                        Clay__WrappedTextLine *wrappedLine = Clay__WrappedTextLineArraySlice_Get(&currentElement->textElementData.wrappedLines, lineIndex);
-                        if (wrappedLine->line.length == 0) {
+                    // DEFOLD VENDORED CHANGE [DCLAY-04]: emit one complete
+                    // paragraph command when the renderer owns text layout.
+                    #ifndef CLAY_WASM
+                    if (Clay__HasLayoutTextFunction()) {
+                        if (currentElement->textElementData.text.length > 0) {
+                            Clay__AddRenderCommand(CLAY__INIT(Clay_RenderCommand) {
+                                .boundingBox = currentElementBoundingBox,
+                                .renderData = { .text = {
+                                    .stringContents = CLAY__INIT(Clay_StringSlice) { .length = currentElement->textElementData.text.length, .chars = currentElement->textElementData.text.chars, .baseChars = currentElement->textElementData.text.chars },
+                                    .textColor = textElementConfig->textColor,
+                                    .fontId = textElementConfig->fontId,
+                                    .fontSize = textElementConfig->fontSize,
+                                    .letterSpacing = textElementConfig->letterSpacing,
+                                    .lineHeight = textElementConfig->lineHeight,
+                                    .wrapMode = textElementConfig->wrapMode,
+                                    .textAlignment = textElementConfig->textAlignment,
+                                    .paragraphLayout = true,
+                                }},
+                                .userData = textElementConfig->userData,
+                                .id = currentElement->id,
+                                .zIndex = root->zIndex,
+                                .commandType = CLAY_RENDER_COMMAND_TYPE_TEXT,
+                            });
+                        }
+                    } else
+                    #endif
+                    {
+                        float naturalLineHeight = currentElement->textElementData.preferredDimensions.height;
+                        float finalLineHeight = textElementConfig->lineHeight > 0 ? (float)textElementConfig->lineHeight : naturalLineHeight;
+                        float lineHeightOffset = (finalLineHeight - naturalLineHeight) / 2;
+                        float yPosition = lineHeightOffset;
+                        for (int32_t lineIndex = 0; lineIndex < currentElement->textElementData.wrappedLines.length; ++lineIndex) {
+                            Clay__WrappedTextLine *wrappedLine = Clay__WrappedTextLineArraySlice_Get(&currentElement->textElementData.wrappedLines, lineIndex);
+                            if (wrappedLine->line.length == 0) {
+                                yPosition += finalLineHeight;
+                                continue;
+                            }
+                            float offset = (currentElementBoundingBox.width - wrappedLine->dimensions.width);
+                            if (textElementConfig->textAlignment == CLAY_TEXT_ALIGN_LEFT) {
+                                offset = 0;
+                            }
+                            if (textElementConfig->textAlignment == CLAY_TEXT_ALIGN_CENTER) {
+                                offset /= 2;
+                            }
+                            Clay__AddRenderCommand(CLAY__INIT(Clay_RenderCommand) {
+                                .boundingBox = { currentElementBoundingBox.x + offset, currentElementBoundingBox.y + yPosition, wrappedLine->dimensions.width, wrappedLine->dimensions.height },
+                                .renderData = { .text = {
+                                    .stringContents = CLAY__INIT(Clay_StringSlice) { .length = wrappedLine->line.length, .chars = wrappedLine->line.chars, .baseChars = currentElement->textElementData.text.chars },
+                                    .textColor = textElementConfig->textColor,
+                                    .fontId = textElementConfig->fontId,
+                                    .fontSize = textElementConfig->fontSize,
+                                    .letterSpacing = textElementConfig->letterSpacing,
+                                    .lineHeight = textElementConfig->lineHeight,
+                                    .wrapMode = textElementConfig->wrapMode,
+                                    .textAlignment = textElementConfig->textAlignment,
+                                }},
+                                .userData = textElementConfig->userData,
+                                .id = Clay__HashNumber(lineIndex, currentElement->id).id,
+                                .zIndex = root->zIndex,
+                                .commandType = CLAY_RENDER_COMMAND_TYPE_TEXT,
+                            });
                             yPosition += finalLineHeight;
-                            continue;
-                        }
-                        float offset = (currentElementBoundingBox.width - wrappedLine->dimensions.width);
-                        if (textElementConfig->textAlignment == CLAY_TEXT_ALIGN_LEFT) {
-                            offset = 0;
-                        }
-                        if (textElementConfig->textAlignment == CLAY_TEXT_ALIGN_CENTER) {
-                            offset /= 2;
-                        }
-                        Clay__AddRenderCommand(CLAY__INIT(Clay_RenderCommand) {
-                            .boundingBox = { currentElementBoundingBox.x + offset, currentElementBoundingBox.y + yPosition, wrappedLine->dimensions.width, wrappedLine->dimensions.height },
-                            .renderData = { .text = {
-                                .stringContents = CLAY__INIT(Clay_StringSlice) { .length = wrappedLine->line.length, .chars = wrappedLine->line.chars, .baseChars = currentElement->textElementData.text.chars },
-                                .textColor = textElementConfig->textColor,
-                                .fontId = textElementConfig->fontId,
-                                .fontSize = textElementConfig->fontSize,
-                                .letterSpacing = textElementConfig->letterSpacing,
-                                .lineHeight = textElementConfig->lineHeight,
-                            }},
-                            .userData = textElementConfig->userData,
-                            .id = Clay__HashNumber(lineIndex, currentElement->id).id,
-                            .zIndex = root->zIndex,
-                            .commandType = CLAY_RENDER_COMMAND_TYPE_TEXT,
-                        });
-                        yPosition += finalLineHeight;
 
-                        if (!context->disableCulling && (currentElementBoundingBox.y + yPosition > context->layoutDimensions.height)) {
-                            break;
+                            if (!context->disableCulling && (currentElementBoundingBox.y + yPosition > context->layoutDimensions.height)) {
+                                break;
+                            }
                         }
                     }
                 } else {
@@ -3103,7 +3280,8 @@ void Clay__CalculateFinalLayout(float deltaTime, bool useStoredBoundingBoxes, bo
                         Clay__AddRenderCommand(renderCommand);
                     }
                     /*
-                     * DEFOLD VENDORED FIX / UPSTREAM BUG REPORT NOTES
+                     * DEFOLD VENDORED CHANGE [DCLAY-03]
+                     * UPSTREAM BUG REPORT NOTES
                      *
                      * Clay 0.14 originally tested only `backgroundColor.a > 0`
                      * here. An element configured with both a background color
@@ -3470,10 +3648,14 @@ Clay__RenderDebugLayoutData Clay__RenderDebugLayoutElementsList(int32_t initialR
                 layoutData.rowCount++;
                 Clay__TextElementData *textElementData = &currentElement->textElementData;
                 Clay_TextElementConfig rawTextConfig = offscreen ? CLAY__INIT(Clay_TextElementConfig) { .textColor = CLAY__DEBUGVIEW_COLOR_3, .fontSize = 16 } : Clay__DebugView_TextNameConfig;
+                // DEFOLD VENDORED CHANGE [DCLAY-05]: show markup source
+                // literally in the debug inspector.
+                Clay_String rawText = textElementData->text.length > 40 ? (CLAY__INIT(Clay_String) { .length = 40, .chars = textElementData->text.chars }) : textElementData->text;
+                Clay_String escapedText = Clay__EscapeTextForDebugView(rawText);
                 CLAY_AUTO_ID({ .layout = { .sizing = { .height = CLAY_SIZING_FIXED(CLAY__DEBUGVIEW_ROW_HEIGHT)}, .childAlignment = { .y = CLAY_ALIGN_Y_CENTER } } }) {
                     CLAY_AUTO_ID({ .layout = { .sizing = {.width = CLAY_SIZING_FIXED(CLAY__DEBUGVIEW_INDENT_WIDTH + 16) } } }) {}
                     CLAY_TEXT(CLAY_STRING("\""), rawTextConfig);
-                    CLAY_TEXT(textElementData->text.length > 40 ? (CLAY__INIT(Clay_String) { .length = 40, .chars = textElementData->text.chars }) : textElementData->text, rawTextConfig);
+                    CLAY_TEXT(escapedText, rawTextConfig);
                     if (textElementData->text.length > 40) {
                         CLAY_TEXT(CLAY_STRING("..."), rawTextConfig);
                     }
@@ -4135,6 +4317,13 @@ void Clay_SetMeasureTextFunction(Clay_Dimensions (*measureTextFunction)(Clay_Str
     Clay_Context* context = Clay_GetCurrentContext();
     Clay__MeasureText = measureTextFunction;
     context->measureTextUserData = userData;
+}
+// DEFOLD VENDORED CHANGE [DCLAY-04]: register the optional native paragraph
+// callback independently of Clay's upstream word-slice measurement callback.
+void Clay_SetLayoutTextFunction(Clay_TextLayoutResult (*layoutTextFunction)(Clay_String text, Clay_TextElementConfig *config, float maxWidth, void *userData), void *userData) {
+    Clay_Context* context = Clay_GetCurrentContext();
+    Clay__LayoutText = layoutTextFunction;
+    context->layoutTextUserData = userData;
 }
 void Clay_SetQueryScrollOffsetFunction(Clay_Vector2 (*queryScrollOffsetFunction)(uint32_t elementId, void *userData), void *userData) {
     Clay_Context* context = Clay_GetCurrentContext();

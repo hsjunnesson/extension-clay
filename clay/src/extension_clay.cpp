@@ -13,100 +13,13 @@
 #include <dmsdk/gui/gui.h>
 #include <float.h>
 
+// When compiling this feature as an extension, we need to declare all of the stuff we're using that's not exposed to native extensions.
 #if defined(DEFOLD_CLAY_EXTENSION)
-// This isn't neat. But a lot of function we require in dmGui aren't available to Defold extensions,
-// so we must declare those functions and structs here.
-
-#if defined(_WIN32) && defined(GetTextMetrics)
-#undef GetTextMetrics
-#endif
-
-namespace dmGui
-{
-    struct TextMetrics
-    {
-        /// Default constructor, initializes everything to 0
-        TextMetrics();
-
-        /// Total string width
-        float m_Width;
-        /// Total string height
-        float m_Height;
-        /// Max ascent of font
-        float m_MaxAscent;
-        /// Max descent of font, positive value
-        float m_MaxDescent;
-    };
-
-    enum Pivot
-    {
-        PIVOT_CENTER = 0,
-        PIVOT_N = 1,
-        PIVOT_NE = 2,
-        PIVOT_E = 3,
-        PIVOT_SE = 4,
-        PIVOT_S = 5,
-        PIVOT_SW = 6,
-        PIVOT_W = 7,
-        PIVOT_NW = 8,
-    };
-
-    enum SizeMode
-    {
-        SIZE_MODE_MANUAL = 0,
-        SIZE_MODE_AUTO = 1,
-    };
-
-    enum ClippingMode
-    {
-        CLIPPING_MODE_NONE = 0,
-        CLIPPING_MODE_STENCIL = 2,
-    };
-
-    typedef struct TextLayout* HTextLayout;
-
-    struct TextLayout
-    {
-        HTextLayout m_Handle;
-        uint64_t    m_Key;
-    };
-
-    typedef void (*AnimationComplete)(HScene scene,
-                                      HNode  node,
-                                      bool   finished,
-                                      void*  userdata1,
-                                      void*  userdata2);
-
-    dmVMath::Point3  GetNodeSize(HScene scene, HNode node);
-    dmVMath::Matrix4 GetNodeWorldTransform(HScene scene, HNode node);
-
-    Result           GetTextMetrics(HScene scene, const char* text, dmhash_t font_id, float width, bool line_break, float leading, float tracking, TextMetrics* metrics);
-    void             SetNodePivot(HScene scene, HNode node, Pivot pivot);
-    void             SetNodeInheritAlpha(HScene scene, HNode node, bool inherit_alpha);
-    void             SetNodeSizeMode(HScene scene, HNode node, SizeMode size_mode);
-    Pivot            GetNodePivot(HScene scene, HNode node);
-    Result           PlayNodeFlipbookAnim(HScene scene, HNode node, dmhash_t anim, float offset, float playback_rate, AnimationComplete anim_complete_callback = 0x0, void* callback_userdata1 = 0x0, void* callback_userdata2 = 0x0);
-    int32_t          GetNodeAnimationFrameCount(HScene scene, HNode node);
-    void             CancelNodeFlipbookAnim(HScene scene, HNode node, bool keep_anim_hash);
-    void             MoveNodeAbove(HScene scene, HNode node, HNode reference);
-    void             MoveNodeBelow(HScene scene, HNode node, HNode reference);
-    Result           SetNodeFont(HScene scene, HNode node, dmhash_t font_id);
-    void             SetNodeText(HScene scene, HNode node, const char* text);
-    void             SetNodeLineBreak(HScene scene, HNode node, bool line_break);
-    void             SetNodeTextLeading(HScene scene, HNode node, float leading);
-    void             SetNodeTextTracking(HScene scene, HNode node, float tracking);
-    void             SetNodeClippingMode(HScene scene, HNode node, ClippingMode mode);
-    void             SetNodeClippingVisible(HScene scene, HNode node, bool visible);
-    void             SetNodeClippingInverted(HScene scene, HNode node, bool inverted);
-    Result           SetNodeLayer(HScene scene, HNode node, dmhash_t layer_id);
-    const void*      GetNodeRenderConstants(HScene scene, HNode node);
-    void             SetNodeRenderConstants(HScene scene, HNode node, void* render_constants);
-    const float*     GetNodeFlipbookAnimUV(HScene scene, HNode node);
-    void             GetNodeFlipbookAnimUVFlip(HScene scene, HNode node, bool& flip_horizontal, bool& flip_vertical);
-    void*            GetFont(HScene scene, dmhash_t font_hash);
-} // namespace dmGui
+#include "extension_clay.hpp"
 #else
 #include <gui/gui.h>
+#include <font/text_layout.h>
+#include <render/font/fontmap.h>
 #endif // DEFOLD_CLAY_EXTENSION
 
 #define MODULE_NAME "clay"
@@ -162,6 +75,7 @@ struct dclay_font_t
 {
     dmhash_t alias;
     float    base_size;
+    float    natural_height;
     bool     valid;
     PAD(3);
 };
@@ -1518,6 +1432,13 @@ static bool dclay_QueryFont(dclay_surface_t* surface, dmhash_t alias, dclay_font
 
     out_font->alias = alias;
     out_font->base_size = (float)info.m_Size;
+    out_font->natural_height = out_font->base_size;
+
+    dmGui::TextMetrics metrics = {};
+    if (dmGui::GetTextMetrics(surface->gui_scene, "M", alias, FLT_MAX, false, 1.0f, 0.0f, &metrics) == dmGui::RESULT_OK && metrics.m_Height > 0.0f)
+    {
+        out_font->natural_height = metrics.m_Height;
+    }
     out_font->valid = true;
 
     return true;
@@ -1801,6 +1722,129 @@ static Clay_Dimensions dclay_MeasureText(Clay_StringSlice text, Clay_TextElement
     }
 
     return dimensions;
+}
+
+// This intentionally matches the current GUI renderer behavior. Inline
+// sprites reserve their requested dimensions, but the GUI renderer does not
+// yet resolve or draw a sprite resource for them.
+static uint8_t dclay_ResolveTextLayoutObject(void*, const char*, const TextLayoutObjectAttribute*, float proposed_width, float proposed_height, TextLayoutObject* object)
+{
+    object->m_Width = proposed_width;
+    object->m_Height = proposed_height;
+    object->m_Resource = 0;
+    return 1;
+}
+
+static bool dclay_GetParagraphDimensions(dclay_surface_t* surface, Clay_String text, Clay_TextElementConfig* config, float max_width, bool line_break, Clay_Dimensions* dimensions)
+{
+    if (!surface || config->fontId >= surface->fonts.Size() || !surface->fonts[config->fontId].valid)
+    {
+        return false;
+    }
+
+    uint32_t length = (uint32_t)text.length;
+    if (surface->text_scratch.Capacity() < length + 1)
+    {
+        surface->text_scratch.SetCapacity(length + 1);
+    }
+
+    surface->text_scratch.SetSize(length + 1);
+    memcpy(surface->text_scratch.Begin(), text.chars, length);
+    surface->text_scratch[length] = 0;
+
+    const dclay_font_t&         font = surface->fonts[config->fontId];
+    dmGameSystem::FontResource* resource = (dmGameSystem::FontResource*)dmGui::GetFont(surface->gui_scene, font.alias);
+    dmRender::HFontMap          font_map = resource ? dmGameSystem::ResFontGetHandle(resource) : 0;
+    if (!font_map)
+    {
+        return false;
+    }
+
+    float              requested_size = config->fontSize > 0 ? (float)config->fontSize : font.base_size;
+    float              scale = requested_size / font.base_size;
+
+    TextLayoutSettings settings = {};
+    settings.m_Size = dmRender::GetFontMapSize(font_map);
+    settings.m_Width = line_break && scale > 0.0f ? max_width / scale : FLT_MAX;
+    settings.m_Leading = config->lineHeight > 0 && font.natural_height > 0.0f ? ((float)config->lineHeight / scale) / font.natural_height : 1.0f;
+    settings.m_Tracking = requested_size > 0.0f ? (float)config->letterSpacing / requested_size : 0.0f;
+    settings.m_ResolveObject = dclay_ResolveTextLayoutObject;
+    settings.m_BaseStyle = dmHashString64("default");
+    settings.m_Padding = dmRender::GetFontMapPadding(font_map);
+    settings.m_LineBreak = line_break;
+    settings.m_Monospace = dmRender::GetFontMapMonospaced(font_map);
+    settings.m_UseBaseStyle = 1;
+
+    HTextLayout layout = 0;
+    HMarkup     markup = 0;
+    // Match Defold's GUI text preparation path: font_richtext parses markup,
+    // while font_richtext_null reports unsupported. Unsupported or invalid
+    // markup falls through to ordinary text layout using the original source.
+    MarkupResult markup_result = MarkupCreate(surface->text_scratch.Begin(), length, &markup, 0);
+    TextResult   result = TEXT_RESULT_ERROR;
+
+    if (markup_result == MARKUP_RESULT_OK)
+    {
+        result = TextLayoutCreateMarkup(dmRender::GetFontCollection(font_map), markup, &settings, &layout);
+    }
+    MarkupDestroy(markup);
+
+    dmRender::TextMetrics metrics = {};
+    if (result != TEXT_RESULT_OK)
+    {
+        if (layout)
+        {
+            TextLayoutRelease(layout);
+            layout = 0;
+        }
+
+        dmRender::GetTextMetrics(font_map, surface->text_scratch.Begin(), &settings, &metrics);
+    }
+    else
+    {
+        dmRender::GetTextMetrics(font_map, layout, &metrics);
+        TextLayoutRelease(layout);
+    }
+
+    dimensions->width = metrics.m_Width * scale;
+    dimensions->height = metrics.m_Height * scale;
+    return true;
+}
+
+static Clay_TextLayoutResult dclay_LayoutText(Clay_String text, Clay_TextElementConfig* config, float max_width, void* user_data)
+{
+#if defined(DM_DEBUG)
+    DM_PROFILE("ClayMeasureText");
+    DM_PROPERTY_ADD_U32(rmtp_ClayTextMeasurements, 1);
+#endif
+
+    Clay_TextLayoutResult result = {};
+    dclay_surface_t*      surface = (dclay_surface_t*)user_data;
+    if (text.length == 0)
+    {
+        return result;
+    }
+
+    bool constrained = max_width > 0.0f && config->wrapMode == CLAY_TEXT_WRAP_WORDS;
+    if (!dclay_GetParagraphDimensions(surface, text, config, max_width, constrained, &result.dimensions))
+    {
+        return result;
+    }
+
+    if (max_width <= 0.0f)
+    {
+        result.minWidth = result.dimensions.width;
+        if (config->wrapMode == CLAY_TEXT_WRAP_WORDS)
+        {
+            Clay_Dimensions minimum_dimensions = {};
+            if (dclay_GetParagraphDimensions(surface, text, config, 1.0f, true, &minimum_dimensions))
+            {
+                result.minWidth = minimum_dimensions.width;
+            }
+        }
+    }
+
+    return result;
 }
 
 static Clay_Color dclay_ApplyOverlays(Clay_Color color, const Clay_Color* overlays, uint32_t overlay_count)
@@ -2158,7 +2202,7 @@ static dclay_gui_node_t* dclay_GetOrCreateGuiNode(dclay_surface_t* surface, cons
     return entry;
 }
 
-static void dclay_SetCommandTransform(dclay_surface_t* surface, dmGui::HNode node, const Clay_BoundingBox& box, float scale, const Clay_BoundingBox* parent_box)
+static void dclay_SetCommandTransform(dclay_surface_t* surface, dmGui::HNode node, const Clay_BoundingBox& box, float scale, const Clay_BoundingBox* parent_box, float pivot_x = 0.0f)
 {
     float x;
     float y;
@@ -2169,19 +2213,19 @@ static void dclay_SetCommandTransform(dclay_surface_t* surface, dmGui::HNode nod
 
     if (parent_box)
     {
-        x = box.x - parent_box->x;
+        x = box.x - parent_box->x + box_width * pivot_x;
         y = -(box.y - parent_box->y);
     }
     else
     {
         Clay_Vector2    root_scale = surface->root_screen_scale;
         dmVMath::Point3 root_size = dmGui::GetNodeSize(surface->gui_scene, surface->root_node);
-        float           pivot_x, pivot_y;
+        float           root_pivot_x, root_pivot_y;
 
-        dclay_GetPivotFactors(dmGui::GetNodePivot(surface->gui_scene, surface->root_node), &pivot_x, &pivot_y);
+        dclay_GetPivotFactors(dmGui::GetNodePivot(surface->gui_scene, surface->root_node), &root_pivot_x, &root_pivot_y);
 
-        x = -pivot_x * root_size.getX() + box.x / root_scale.x;
-        y = (1.0f - pivot_y) * root_size.getY() - box.y / root_scale.y;
+        x = -root_pivot_x * root_size.getX() + (box.x + box_width * pivot_x) / root_scale.x;
+        y = (1.0f - root_pivot_y) * root_size.getY() - box.y / root_scale.y;
 
         scale_x /= root_scale.x;
         scale_y /= root_scale.y;
@@ -2319,7 +2363,21 @@ static bool dclay_UpdateTextNode(dclay_surface_t* surface, const Clay_RenderComm
     float               requested_size = text.fontSize > 0 ? (float)text.fontSize : font.base_size;
     float               scale = requested_size / font.base_size;
     float               tracking = requested_size > 0.0f ? (float)text.letterSpacing / requested_size : 0.0f;
+    float               leading = text.paragraphLayout && text.lineHeight > 0 && font.natural_height > 0.0f ? ((float)text.lineHeight / scale) / font.natural_height : 1.0f;
+    float               pivot_x = 0.0f;
     uint32_t            length = (uint32_t)text.stringContents.length;
+
+    dmGui::Pivot        pivot = dmGui::PIVOT_NW;
+    if (text.paragraphLayout && text.textAlignment == CLAY_TEXT_ALIGN_CENTER)
+    {
+        pivot = dmGui::PIVOT_N;
+        pivot_x = 0.5f;
+    }
+    else if (text.paragraphLayout && text.textAlignment == CLAY_TEXT_ALIGN_RIGHT)
+    {
+        pivot = dmGui::PIVOT_NE;
+        pivot_x = 1.0f;
+    }
 
     if (surface->text_scratch.Capacity() < length + 1)
     {
@@ -2336,14 +2394,15 @@ static bool dclay_UpdateTextNode(dclay_surface_t* surface, const Clay_RenderComm
     }
 
     dmGui::SetNodeText(surface->gui_scene, entry->node, surface->text_scratch.Begin());
-    dmGui::SetNodeLineBreak(surface->gui_scene, entry->node, false);
-    dmGui::SetNodeTextLeading(surface->gui_scene, entry->node, 1.0f);
+    dmGui::SetNodePivot(surface->gui_scene, entry->node, pivot);
+    dmGui::SetNodeLineBreak(surface->gui_scene, entry->node, text.paragraphLayout && text.wrapMode == CLAY_TEXT_WRAP_WORDS);
+    dmGui::SetNodeTextLeading(surface->gui_scene, entry->node, leading);
     dmGui::SetNodeTextTracking(surface->gui_scene, entry->node, tracking);
 
     Clay_Color color = dclay_ApplyOverlays(text.textColor, overlays, overlay_count);
     dmGui::SetNodeProperty(surface->gui_scene, entry->node, dmGui::PROPERTY_COLOR, dmVMath::Vector4(color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f));
 
-    dclay_SetCommandTransform(surface, entry->node, command.boundingBox, scale, dclay_GetScopeBox(scope));
+    dclay_SetCommandTransform(surface, entry->node, command.boundingBox, scale, dclay_GetScopeBox(scope), pivot_x);
     dclay_OrderGuiNode(surface, scope.parent, entry->node, scope.previous);
 
     scope.previous = entry->node;
@@ -2775,6 +2834,7 @@ static int dclay_Initialize(lua_State* L)
     surface->gui_nodes.SetCapacity((uint32_t)max_element_count);
 
     Clay_SetMeasureTextFunction(dclay_MeasureText, surface);
+    Clay_SetLayoutTextFunction(dclay_LayoutText, surface);
     Clay_SetCurrentContext(0);
     Clay_SetMaxElementCount(DCLAY_DEFAULT_MAX_ELEMENT_COUNT);
     Clay_SetCurrentContext(previous_context);
