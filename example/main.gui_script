@@ -1,0 +1,15 @@
+local UI = require 'example.ui'
+
+function init(self)
+	UI.clay_surface = clay.initialize(gui.get_node("clay_root"), 16384)
+
+	--- Rich text <link> tag messages (text_object_hovered, text_object_unhovered, and text_object_clicked) are sent to the GUI script.
+	msg.post(".", "acquire_input_focus")
+end
+
+function on_message(self, message_id, message)
+	if message_id == hash("text_object_clicked") then
+		assert(message.type == hash("link"))
+		print(message.id, message.src)
+	end
+end

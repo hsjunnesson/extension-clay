@@ -36,7 +36,7 @@ embedded_instances {
   id: "gui"
   data: "components {\n"
   "  id: \"clay\"\n"
-  "  component: \"/example/example.gui\"\n"
+  "  component: \"/example/main.gui\"\n"
   "}\n"
   ""
 }

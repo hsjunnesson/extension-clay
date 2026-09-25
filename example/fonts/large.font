@@ -1,0 +1,20 @@
+font: "/builtins/fonts/vera_mo_bd.ttf"
+material: "/builtins/fonts/font-df.material"
+size: 24
+output_format: TYPE_DISTANCE_FIELD
+characters: " !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+styles {
+  name: "default"
+}
+styles {
+  name: "link"
+  markup: "<color=#1972e5><ul>"
+}
+styles {
+  name: "link:hover"
+  markup: "<color=#4ca5ff>"
+}
+styles {
+  name: "link:active"
+  markup: "<color=#0c4cb2>"
+}

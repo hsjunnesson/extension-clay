@@ -1,22 +1,506 @@
-local h = {}
+local UI = require 'example.ui'
 
+---@class Main
+---@field grid_count_x integer
+---@field grid_count_y integer
+---@field cell_width integer
+---@field cell_height integer
+---@field tooltip? clay.Element
+---@field grid? clay.Element
+---@field selected_view 'grid'|'widgets'|'rich_text'
+
+---@param self Main
 function init(self)
 	msg.post(".", "acquire_input_focus")
 
-	self.show_profiler = false
-	self.show_clay_debug = false
-	self.frame_count = 0
-	
-	h.toggle_profiler = hash("key_f1")
+	self.grid_count_x = 8
+	self.grid_count_y = 4
+	self.cell_width = 64
+	self.cell_height = 84
+	self.selected_view = 'grid'
 end
 
+---@param self Main
 function on_input(self, action_id, action)
-	if action_id == h.toggle_profiler and action.pressed then
-		self.show_profiler = not self.show_profiler
-		profiler.enable_ui(self.show_profiler)
+	if action_id == UI.h.toggle_profiler and action.pressed then
+		UI.show_profiler = not UI.show_profiler
+		profiler.enable_ui(UI.show_profiler)
+	elseif action_id == UI.h.toggle_clay_debug and action.pressed then
+		clay.set_debug_mode_enabled(UI.clay_surface, not clay.is_debug_mode_enabled(UI.clay_surface))
+	elseif action_id == UI.h.scroll_up then
+		UI.scroll_state[2] = UI.scroll_state[2] + action.value
+	elseif action_id == UI.h.scroll_down then
+		UI.scroll_state[2] = UI.scroll_state[2] - action.value
+	end
+
+	if action.pressed then
+		UI.input_pressed[action_id] = true
+		UI.input_down[action_id] = true
+	elseif action.released then
+		UI.input_pressed[action_id] = nil
+		UI.input_down[action_id] = nil
+		UI.input_released[action_id] = true
+	end
+
+	if action.x and action.y then
+		-- Fix for checking overlaps, Clay's OnHover checks an inclusive range, with integer values
+		-- you can hover two adjacent elements at the same time.
+		UI.pointer_state[1] = action.screen_x + 0.01
+		UI.pointer_state[2] = action.screen_y + 0.01
 	end
 end
 
+---@param self Main
 function on_reload(self)
-	self.show_profiler = false
+	UI.show_profiler = false
 end
+
+---@param self Main
+function final(self)
+	if UI.clay_surface then
+		clay.destroy(UI.clay_surface)
+		UI.clay_surface = nil
+	end
+end
+
+---@param t clay.Element
+local function grid_cell_on_hover(t, pointer)
+	t.background_color = vmath.vector3(0.25, 0.29, 0.37)
+	local tooltip = t.tooltip --[[@as clay.Element]]
+	tooltip.floating.offset.x = pointer.x + 12
+	tooltip.floating.offset.y = pointer.y + 12
+	tooltip.border.color = vmath.vector4(1.0, 1.0, 1.0, 0.8)
+	tooltip.background_color = vmath.vector4(0.04, 0.05, 0.07, 0.8)
+	tooltip.children[1].text = string.format("Pointer: %d, %d", pointer.x, pointer.y)
+	tooltip.children[1].config.text_color = vmath.vector4(1, 1, 1, 1)
+end
+
+--- A grid with some controls.
+--- An example of caching and retaining the table definition, so it's not re-populated on each update.
+--- Also an example of using Clay's transitions with the grow button.
+---@param self Main
+---@return clay.Child[]
+local function grid_element(self)
+	-- Create tooltip
+	if not self.tooltip then
+		self.tooltip = {
+			id = "pointer_tooltip",
+			layout = {
+				padding = 8,
+			},
+			floating = {
+				offset = { x = 0, y = 0 },
+				z_index = 100,
+				attach_points = {
+					element = clay.ATTACH_POINT_LEFT_TOP,
+					parent = clay.ATTACH_POINT_LEFT_TOP,
+				},
+				pointer_capture_mode = clay.POINTER_CAPTURE_MODE_PASSTHROUGH,
+				attach_to = clay.ATTACH_TO_ROOT,
+				clip_to = clay.CLIP_TO_NONE,
+			},
+			corner_radius = 6,
+			border = {
+				width = 1,
+				color = vmath.vector4(0.0),
+				layer = UI.h.tooltip_borders,
+			},
+			background_color = vmath.vector4(0.0),
+			layer = UI.h.tooltip_background,
+			children = {
+				clay.text("", {
+					font_id = UI.h.heading,
+					font_size = 16,
+					text_color = vmath.vector4(1, 1, 1, 0),
+					layer = UI.h.tooltip_text,
+				}),
+			},
+		}
+	end
+
+	-- Create grid
+	if not self.grid then
+		self.grid = {
+			id = "grid",
+			layout = {
+				sizing = {
+					width = clay.sizing_fit(),
+					height = clay.sizing_fit(),
+				},
+				layout_direction = clay.TOP_TO_BOTTOM,
+				child_gap = 8,
+				padding = 0,
+			},
+			clip = {
+				vertical = true,
+				scroll = true,
+			},
+			children = {},
+		}
+
+		for y = 1, self.grid_count_y do
+			self.grid.children[y] = {
+				id = clay.idi_local("row", y),
+				layout = {
+					sizing = {
+						width = clay.sizing_fit(),
+						height = clay.sizing_grow(),
+					},
+					layout_direction = clay.LEFT_TO_RIGHT,
+					child_gap = 8,
+				},
+				children = {},
+			}
+
+			for x = 1, self.grid_count_x do
+				self.grid.children[y].children[x] = {
+					id = clay.idi_local("cell", x),
+					layout = {
+						sizing = {
+							width = clay.sizing_fixed(self.cell_width),
+							height = clay.sizing_fixed(self.cell_height),
+						},
+						child_alignment = {
+							x = clay.ALIGN_X_CENTER,
+							y = clay.ALIGN_Y_TOP,
+						},
+						layout_direction = clay.TOP_TO_BOTTOM,
+						padding = 4,
+						child_gap = 4,
+					},
+					transition = {
+						duration = 0.25,
+						properties = clay.TRANSITION_PROPERTY_DIMENSIONS,
+					},
+					corner_radius = 6,
+					background_color = UI.col.neutral_inkstone,
+					on_hover = grid_cell_on_hover,
+					tooltip = self.tooltip,
+					layer = UI.h.background,
+					children = {
+						-- Inner header
+						{
+							id = clay.idi_local("inner_header", x),
+							layout = {
+								sizing = {
+									width = clay.sizing_grow(),
+									height = clay.sizing_fit(),
+								},
+								child_alignment = {
+									x = clay.ALIGN_X_CENTER,
+									y = clay.ALIGN_Y_CENTER,
+								},
+							},
+							corner_radius = 6,
+							background_color = UI.col.light_blue,
+							layer = UI.h.background,
+							children = {
+								clay.text(x .. "," .. y, UI.text.heading_black),
+							},
+						},
+						-- Icon
+						{
+							id = clay.idi_local("icon", x),
+							layout = {
+								sizing = {
+									width = clay.sizing_grow(),
+									height = clay.sizing_grow(),
+								},
+							},
+							corner_radius = 6,
+							layer = UI.h.icon,
+							image = {
+								texture = UI.h.example,
+								animation = UI.h.whep,
+							},
+						},						
+					},
+				}
+			end
+		end
+	end
+
+	-- Create grid controls
+	local grid_controls = {
+		id = "controls",
+		layout = {
+			sizing = {
+				width = clay.sizing_fit(128),
+				height = clay.sizing_fit(),
+			},
+			padding = 0,
+			child_gap = 8,
+			layout_direction = clay.TOP_TO_BOTTOM,
+		},
+		children = {
+			clay.text(string.format("Grid Size: %u x %u", self.grid_count_x, self.grid_count_y), UI.text.heading),
+			UI.button(clay.id_local("row_add"), "Add row", nil, {
+				on_pressed = function(action_id)
+					if action_id == UI.h.touch then
+						self.grid = nil
+						self.grid_count_y = self.grid_count_y + 1
+					end
+				end
+			}),
+			UI.button(clay.id_local("row_add_10"), "Add 10 Rows", nil, {
+				on_pressed = function(action_id)
+					if action_id == UI.h.touch then
+						self.grid = nil
+						self.grid_count_y = self.grid_count_y + 10
+					end
+				end
+			}),
+			UI.button(clay.id_local("grow"), "Grow", nil, {
+				on_pressed = function(action_id)
+					if action_id == UI.h.touch then
+						self.cell_width = self.cell_width + 8
+						self.cell_height = self.cell_height + 8
+						self.grid = nil
+					end
+				end
+			}),
+		},
+	}
+
+	-- Update grid
+	for y = 1, self.grid_count_y do
+		for x = 1, self.grid_count_x do
+			self.grid.children[y].children[x].background_color = vmath.vector3(0.18, 0.22, 0.3)
+		end
+	end
+
+	-- Update tooltip
+	self.tooltip.border.color = vmath.vector4(0)
+	self.tooltip.background_color = vmath.vector4(0)
+	self.tooltip.children[1].text = ""
+	self.tooltip.children[1].config.text_color = vmath.vector4(1, 1, 1, 0)
+
+	---@type clay.Element
+	local element = {
+		id = "container",
+		layout = {
+			sizing = {
+				width = clay.sizing_grow(),
+				height = clay.sizing_grow(),
+			},
+			child_gap = 8,
+			layout_direction = clay.LEFT_TO_RIGHT,
+		},
+		children = {
+			self.grid,
+			grid_controls,
+			self.tooltip,
+		}
+	}
+
+	return element
+end
+
+--- Showcasing some different types of widgets.
+---@param self Main
+---@return clay.Element
+local function widgets_element(self)
+	---@type clay.Element
+	local element = {
+		id = "widgets",
+		layout = {
+			child_gap = 16,
+			layout_direction = clay.LEFT_TO_RIGHT,
+		},
+		children = {
+			-- Nine-slice example
+			{
+				id = "nine-slice",
+				layout = {
+					padding = 8,
+					child_gap = 8,
+					layout_direction = clay.TOP_TO_BOTTOM,
+				},
+				children = {
+					clay.text("Nine sliced rectangle", UI.text.heading),
+					{
+						id = "nine-slice-inner",
+						layout = {
+							sizing = {
+								width = clay.sizing_fit(128),
+								height = clay.sizing_fit(64),
+							},
+							layout_direction = clay.TOP_TO_BOTTOM,
+							child_alignment = {
+								x = clay.ALIGN_X_CENTER,
+								y = clay.ALIGN_Y_CENTER,
+							},
+						},
+						background_color = UI.col.blue_ocean_sky,
+						slice9 = vmath.vector4(8, 8, 8, 16),
+						image = {
+							texture = UI.h.example,
+							animation = UI.h.square,
+						},
+						children = {
+							clay.text("WOW!", UI.text.heading)
+						},
+					},
+				},
+			},
+
+			-- Buttons
+			{
+				id = "buttons",
+				layout = {
+					padding = 8,
+					child_gap = 8,
+					layout_direction = clay.TOP_TO_BOTTOM,
+				},
+				children = {
+					clay.text("Buttons", UI.text.heading),
+					UI.button("text button", "Text", nil, {
+						on_pressed = function(action_id)
+							if action_id == UI.h.touch then
+								print("CLICK")
+							elseif action_id == UI.h.mouse_button_right then
+								print("RIGHT CLICKED")
+							end
+						end
+					}),
+					UI.button("image button", nil, "smiley", {
+						on_pressed = function(action_id)
+							if action_id == UI.h.touch then
+								print("CLICK")
+							elseif action_id == UI.h.mouse_button_right then
+								print("RIGHT CLICKED")
+							end
+						end
+					}),
+					UI.button("combo button", "Combo", "smiley", {
+						on_pressed = function(action_id)
+							if action_id == UI.h.touch then
+								print("CLICK")
+							elseif action_id == UI.h.mouse_button_right then
+								print("RIGHT CLICKED")
+							end
+						end
+					}),
+				},
+			},
+		}
+	}
+
+	return element
+end
+
+--- Showcasing the rich text implementation.
+---@param self Main
+---@return clay.Element
+local function rich_text_element(self)
+	local wiggle = "<shadow x=6 y=-6 blur=4 color=#141923><wave><outline size=3 color=#141923>WIGGLE WIGGLE WIGGLE</outline></wave></shadow>"
+	local link = "An example of a text with a <link id=click src=example>link</link>."
+	local inline = "Inlining images <sprite id=whep src=example animation=whep width=24px height=24px /> in text."
+
+	---@type clay.Element
+	local element = {
+		id = "widgets",
+		layout = {
+			child_gap = 16,
+			layout_direction = clay.TOP_TO_BOTTOM,
+			padding = 16,
+		},
+		background_color = UI.col.blue_ocean_sky,
+		corner_radius = 8,
+		children = {
+			clay.text(wiggle, UI.text.joyful),
+			clay.text(link, UI.text.label),
+			clay.text(inline, UI.text.label),
+		}
+	}
+
+	return element
+end
+
+---@param self Main
+function update(self, dt)
+	if UI.clay_surface then
+		-- Interaction uses the previous completed layout and must run before
+		-- layout resets Clay's per-frame element tree.
+		local is_pressing = UI.input_down[UI.h.mouse_button_left] == true or UI.input_down[UI.h.touch] == true
+		clay.set_pointer_state(UI.clay_surface, UI.pointer_state[1], UI.pointer_state[2], is_pressing)
+		clay.update_scroll_containers(UI.clay_surface, true, UI.scroll_state[1], UI.scroll_state[2], dt)
+
+		---@type clay.Element
+		local root = {
+			id = "root",
+			layout = {
+				sizing = {
+					width = clay.sizing_grow(),
+					height = clay.sizing_grow(),
+				},
+				padding = 16,
+				child_gap = 16,
+				layout_direction = clay.TOP_TO_BOTTOM,
+			},
+			background_color = UI.col.background,
+			children = {
+				-- Top bar that lets you shift between example views.
+				{
+					id = "top bar",
+					layout = {
+						sizing = {
+							width = clay.sizing_percent(0.35),
+						},
+						layout_direction = clay.LEFT_TO_RIGHT,
+						padding = 16,
+						child_alignment = {
+							x = clay.ALIGN_X_CENTER,
+							y = clay.ALIGN_Y_CENTER,
+						},
+					},
+					background_color = UI.col.dark_gray,
+					corner_radius = 8,
+					children = {
+						UI.button(clay.id_local("prev"), "Prev", nil, {
+							on_pressed = function(action_id)
+								if (action_id == UI.h.touch) then
+									if self.selected_view == 'grid' then
+										self.selected_view = 'rich_text'
+									elseif self.selected_view == 'rich_text' then
+										self.selected_view = 'widgets'
+									elseif self.selected_view == 'widgets' then
+										self.selected_view = 'grid'
+	 								end
+								end
+							end
+						}),
+						{layout = {sizing = {width = clay.sizing_grow(), height = clay.sizing_fit()}}}, -- spacer
+						clay.text(self.selected_view, UI.text.large),
+						{layout = {sizing = {width = clay.sizing_grow(), height = clay.sizing_fit()}}}, -- spacer
+						UI.button(clay.id_local("next"), "Next", nil, {
+							on_pressed = function(action_id)
+								if (action_id == UI.h.touch) then
+									if self.selected_view == 'grid' then
+										self.selected_view = 'widgets'
+									elseif self.selected_view == 'widgets' then
+										self.selected_view = 'rich_text'
+									elseif self.selected_view == 'rich_text' then
+										self.selected_view = 'grid'
+	 								end
+								end
+							end
+						}),
+					}
+				}
+			},
+		}
+
+		if self.selected_view == 'grid' then
+			table.insert(root.children, grid_element(self))
+		elseif self.selected_view == 'widgets' then
+			table.insert(root.children, widgets_element(self))
+		elseif self.selected_view == 'rich_text' then
+			table.insert(root.children, rich_text_element(self))
+		end
+
+		clay.layout(UI.clay_surface, root, dt)
+		UI:reset_input_state()
+	end
+end
+

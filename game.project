@@ -11,6 +11,7 @@ samples = 8
 
 [project]
 title = extension-clay
+dependencies = 
 
 [library]
 include_dirs = clay

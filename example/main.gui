@@ -1,4 +1,4 @@
-script: "/example/example.gui_script"
+script: "/example/main.gui_script"
 fonts {
   name: "heading"
   font: "/example/fonts/heading.font"
@@ -10,6 +10,14 @@ fonts {
 fonts {
   name: "joyful"
   font: "/example/fonts/joyful.font"
+}
+fonts {
+  name: "label"
+  font: "/example/fonts/label.font"
+}
+fonts {
+  name: "large"
+  font: "/example/fonts/large.font"
 }
 textures {
   name: "example"
