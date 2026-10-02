@@ -10,6 +10,7 @@
 #include <dmsdk/dlib/profile.h>
 #include <dmsdk/gamesys/render_constants.h>
 #include <dmsdk/gamesys/resources/res_font.h>
+#include <dmsdk/graphics/graphics.h>
 #include <dmsdk/gui/gui.h>
 #include <float.h>
 
@@ -647,27 +648,34 @@ static Clay_Dimensions dclay_GetRootDimensions(dclay_surface_t* surface, Clay_Ve
     dmVMath::Matrix4 world = dmGui::GetNodeWorldTransform(surface->gui_scene, surface->root_node);
     dmVMath::Vector4 x_axis = world.getCol0();
     dmVMath::Vector4 y_axis = world.getCol1();
-    Clay_Vector2     screen_scale = {
-        sqrtf(x_axis.getX() * x_axis.getX() + x_axis.getY() * x_axis.getY()),
-        sqrtf(y_axis.getX() * y_axis.getX() + y_axis.getY() * y_axis.getY())
-    };
+    float            screen_scale = dmGraphics::GetDisplayScaleFactor(dmGraphics::GetInstalledContext());
 
-    if (screen_scale.x <= FLT_EPSILON)
+    if (screen_scale <= FLT_EPSILON)
     {
-        screen_scale.x = 1.0f;
+        screen_scale = 1.0f;
     }
 
-    if (screen_scale.y <= FLT_EPSILON)
+    Clay_Vector2 layout_scale = {
+        sqrtf(x_axis.getX() * x_axis.getX() + x_axis.getY() * x_axis.getY()) / screen_scale,
+        sqrtf(y_axis.getX() * y_axis.getX() + y_axis.getY() * y_axis.getY()) / screen_scale
+    };
+
+    if (layout_scale.x <= FLT_EPSILON)
     {
-        screen_scale.y = 1.0f;
+        layout_scale.x = 1.0f;
+    }
+
+    if (layout_scale.y <= FLT_EPSILON)
+    {
+        layout_scale.y = 1.0f;
     }
 
     if (out_screen_scale)
     {
-        *out_screen_scale = screen_scale;
+        *out_screen_scale = layout_scale;
     }
 
-    return { size.getX() * screen_scale.x, size.getY() * screen_scale.y };
+    return { size.getX() * layout_scale.x, size.getY() * layout_scale.y };
 }
 
 static bool dclay_HasMetatable(lua_State* L, int index, const char* name)
@@ -3239,9 +3247,9 @@ static int dclay_LayoutProtected(lua_State* L)
     surface->user_data.SetSize(0);
 
     // GetNodeSize() is only the authored size. The calculated world transform
-    // carries Defold's window/layout adjustment, so use its axis lengths to
-    // express the root bounds in screen pixels. Rendered nodes cancel this
-    // scale in dclay_SetCommandTransform().
+    // carries Defold's window/layout adjustment and display backing scale.
+    // dclay_GetRootDimensions() removes the backing scale, leaving logical GUI
+    // units that rendered nodes cancel in dclay_SetCommandTransform().
     Clay_SetLayoutDimensions(dclay_GetRootDimensions(surface, &surface->root_screen_scale));
 
     Clay_BeginLayout();
