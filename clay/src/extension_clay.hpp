@@ -202,8 +202,8 @@ namespace dmGui
     Result           PlayNodeFlipbookAnim(HScene scene, HNode node, dmhash_t anim, float offset, float playback_rate, AnimationComplete anim_complete_callback = 0x0, void* callback_userdata1 = 0x0, void* callback_userdata2 = 0x0);
     int32_t          GetNodeAnimationFrameCount(HScene scene, HNode node);
     void             CancelNodeFlipbookAnim(HScene scene, HNode node, bool keep_anim_hash);
-    void             MoveNodeAbove(HScene scene, HNode node, HNode reference);
-    void             MoveNodeBelow(HScene scene, HNode node, HNode reference);
+    Result           MoveNodeAbove(HScene scene, HNode node, HNode reference);
+    Result           MoveNodeBelow(HScene scene, HNode node, HNode reference);
     Result           SetNodeFont(HScene scene, HNode node, dmhash_t font_id);
     void             SetNodeText(HScene scene, HNode node, const char* text);
     void             SetNodeLineBreak(HScene scene, HNode node, bool line_break);
